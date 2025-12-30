@@ -208,8 +208,20 @@ pub fn upsert_account(email: String, name: Option<String>, token: TokenData) -> 
         // 更新现有账号
         match load_account(&account_id) {
             Ok(mut account) => {
+                let old_access_token = account.token.access_token.clone();
+                let old_refresh_token = account.token.refresh_token.clone();
                 account.token = token;
                 account.name = name.clone();
+                // If an account was previously disabled (e.g. invalid_grant), any explicit token upsert
+                // should re-enable it (user manually updated credentials in the UI).
+                if account.disabled
+                    && (account.token.refresh_token != old_refresh_token
+                        || account.token.access_token != old_access_token)
+                {
+                    account.disabled = false;
+                    account.disabled_reason = None;
+                    account.disabled_at = None;
+                }
                 account.update_last_used();
                 save_account(&account)?;
                 
@@ -430,7 +442,22 @@ pub async fn fetch_quota_with_retry(account: &mut Account) -> crate::error::AppR
     use reqwest::StatusCode;
     
     // 1. 基于时间的检查 (Time-based check) - 先确保 Token 有效
-    let token = oauth::ensure_fresh_token(&account.token).await.map_err(AppError::OAuth)?;
+    let token = match oauth::ensure_fresh_token(&account.token).await {
+        Ok(t) => t,
+        Err(e) => {
+            if e.contains("invalid_grant") {
+                modules::logger::log_error(&format!(
+                    "Disabling account {} due to invalid_grant during token refresh (quota check)",
+                    account.email
+                ));
+                account.disabled = true;
+                account.disabled_at = Some(chrono::Utc::now().timestamp());
+                account.disabled_reason = Some(format!("invalid_grant: {}", e));
+                let _ = save_account(account);
+            }
+            return Err(AppError::OAuth(e));
+        }
+    };
     
     if token.access_token != account.token.access_token {
         modules::logger::log_info(&format!("基于时间的 Token 刷新: {}", account.email));
@@ -491,9 +518,22 @@ pub async fn fetch_quota_with_retry(account: &mut Account) -> crate::error::AppR
                 modules::logger::log_warn(&format!("401 Unauthorized for {}, forcing refresh...", account.email));
                 
                 // 强制刷新
-                let token_res = oauth::refresh_access_token(&account.token.refresh_token)
-                    .await
-                    .map_err(AppError::OAuth)?;
+                let token_res = match oauth::refresh_access_token(&account.token.refresh_token).await {
+                    Ok(t) => t,
+                    Err(e) => {
+                        if e.contains("invalid_grant") {
+                            modules::logger::log_error(&format!(
+                                "Disabling account {} due to invalid_grant during forced refresh (quota check)",
+                                account.email
+                            ));
+                            account.disabled = true;
+                            account.disabled_at = Some(chrono::Utc::now().timestamp());
+                            account.disabled_reason = Some(format!("invalid_grant: {}", e));
+                            let _ = save_account(account);
+                        }
+                        return Err(AppError::OAuth(e));
+                    }
+                };
                 
                 let new_token = TokenData::new(
                     token_res.access_token.clone(),
