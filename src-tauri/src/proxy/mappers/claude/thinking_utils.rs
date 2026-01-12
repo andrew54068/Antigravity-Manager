@@ -111,7 +111,7 @@ pub fn close_tool_loop_for_thinking(messages: &mut Vec<Message>) {
     if !has_valid_thinking {
         if state.in_tool_loop {
             info!("[Thinking-Recovery] Broken tool loop (ToolResult without preceding Thinking). Recovery triggered.");
-            
+
             // Insert acknowledging message to "close" the history turn
             messages.push(Message {
                 role: "assistant".to_string(),
@@ -127,7 +127,7 @@ pub fn close_tool_loop_for_thinking(messages: &mut Vec<Message>) {
             });
         } else if state.interrupted_tool {
             info!("[Thinking-Recovery] Interrupted tool call detected. Injecting synthetic closure.");
-            
+
             // For interrupted tool, we need to insert the closure AFTER the assistant's tool use
             // but BEFORE the user's latest message.
             if let Some(idx) = state.last_assistant_idx {
@@ -142,23 +142,13 @@ pub fn close_tool_loop_for_thinking(messages: &mut Vec<Message>) {
     }
 }
 
-/// Cache the relationship between a signature and its model family
-pub fn cache_signature_family(signature: &str, family: &str) {
-    SignatureCache::global().cache_thinking_family(signature.to_string(), family.to_string());
-}
-
-/// Get the model family origin of a signature
-pub fn get_signature_family(signature: &str) -> Option<String> {
-    SignatureCache::global().get_signature_family(signature)
-}
-
 /// [CRITICAL] Sanitize thinking blocks and check cross-model compatibility
 pub fn filter_invalid_thinking_blocks_with_family(messages: &mut [Message], target_family: Option<&str>) {
     let mut stripped_count = 0;
-    
+
     for msg in messages.iter_mut() {
         if msg.role != "assistant" { continue; }
-        
+
         if let MessageContent::Array(blocks) = &mut msg.content {
             let original_len = blocks.len();
             blocks.retain(|block| {
@@ -168,13 +158,13 @@ pub fn filter_invalid_thinking_blocks_with_family(messages: &mut [Message], targ
                         Some(s) if s.len() >= MIN_SIGNATURE_LENGTH => s,
                         _ => {
                             stripped_count += 1;
-                            return false; 
+                            return false;
                         }
                     };
-                    
+
                     // 2. Family compatibility check (Prevents SONNET-Thinking sig being sent to OPUS-Thinking)
                     if let Some(target) = target_family {
-                        if let Some(origin_family) = get_signature_family(sig) {
+                        if let Some(origin_family) = SignatureCache::global().get_signature_family(sig) {
                             if origin_family != target {
                                 warn!("[Thinking-Sanitizer] Dropping signature from family '{}' for target '{}'", origin_family, target);
                                 stripped_count += 1;
@@ -185,14 +175,14 @@ pub fn filter_invalid_thinking_blocks_with_family(messages: &mut [Message], targ
                 }
                 true
             });
-            
+
             // SAFETY: Claude API requires at least one block
             if blocks.is_empty() && original_len > 0 {
                 blocks.push(ContentBlock::Text { text: ".".to_string() });
             }
         }
     }
-    
+
     if stripped_count > 0 {
         info!("[Thinking-Sanitizer] Stripped {} invalid or incompatible thinking blocks", stripped_count);
     }

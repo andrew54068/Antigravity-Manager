@@ -190,7 +190,7 @@ pub async fn handle_chat_completions(
             // 4. 获取 Token (使用准确的 request_type)
             // 关键：在重试尝试 (attempt > 0) 时强制轮换账号
             let (access_token, project_id, email) = match token_manager
-                .get_token(&config.request_type, attempt > 0, Some(&session_id))
+                .get_token(&config.request_type, attempt > 0, Some(&session_id), &config.final_model)
                 .await
             {
                 Ok(t) => t,
@@ -964,7 +964,6 @@ pub async fn handle_completions(
                 model_candidates.get(model_index + 1).unwrap_or(mapped_model)
             );
         }
->>>>>>> 8920b4b (proxy: add strategy routing and model mapping)
     }
 
     // 所有尝试均失败

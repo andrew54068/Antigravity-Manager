@@ -83,7 +83,7 @@ pub async fn handle_generate(
         for attempt in 0..max_attempts {
             // 4. 获取 Token (使用准确的 request_type)
             // 关键：在重试尝试 (attempt > 0) 时强制轮换账号
-            let (access_token, project_id, email) = match token_manager.get_token(&config.request_type, attempt > 0, Some(&session_id)).await {
+            let (access_token, project_id, email) = match token_manager.get_token(&config.request_type, attempt > 0, Some(&session_id), &config.final_model).await {
                 Ok(t) => t,
                 Err(e) => {
                     return Err((StatusCode::SERVICE_UNAVAILABLE, format!("Token error: {}", e)));
