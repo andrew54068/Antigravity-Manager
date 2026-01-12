@@ -1,10 +1,14 @@
-mod models;
-mod modules;
-mod commands;
-mod utils;
-mod proxy;  // Proxy service module
+pub mod models;
+pub mod modules;
+#[cfg(feature = "ui")]
+pub mod commands;
+pub mod utils;
+pub mod proxy;  // 反代服务模块
+pub mod services; // Shared services
 pub mod error;
 
+
+#[cfg(feature = "ui")]
 use tauri::Manager;
 use modules::logger;
 use tracing::{info, warn, error};
@@ -17,10 +21,10 @@ fn increase_nofile_limit() {
             rlim_cur: 0,
             rlim_max: 0,
         };
-        
+
         if libc::getrlimit(libc::RLIMIT_NOFILE, &mut rl) == 0 {
             info!("Current open file limit: soft={}, hard={}", rl.rlim_cur, rl.rlim_max);
-            
+
             // Attempt to increase to 4096 or maximum hard limit
             let target = 4096.min(rl.rlim_max);
             if rl.rlim_cur < target {
@@ -35,12 +39,14 @@ fn increase_nofile_limit() {
     }
 }
 
-// Test command
+// 测试命令
+#[cfg(feature = "ui")]
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+#[cfg(feature = "ui")]
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Increase file descriptor limit (macOS only)
