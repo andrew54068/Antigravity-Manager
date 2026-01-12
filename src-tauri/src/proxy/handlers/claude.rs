@@ -24,7 +24,10 @@ use crate::proxy::mappers::estimation_calibrator::get_calibrator;
 use axum::http::HeaderMap;
 use std::sync::{atomic::Ordering, Arc};
 
-const MAX_RETRY_ATTEMPTS: usize = 3;
+// Increase to allow rotation across larger account pools.
+const MAX_RETRY_ATTEMPTS: usize = 20;
+#[allow(dead_code)]
+const MIN_SIGNATURE_LENGTH: usize = 10;  // 最小有效签名长度
 
 // ===== Model Constants for Background Tasks =====
 // These can be adjusted for performance/cost optimization or overridden by custom_mapping
@@ -366,34 +369,78 @@ pub async fn handle_messages(
     let mut last_mapped_model: Option<String> = None;
     let mut last_status = StatusCode::SERVICE_UNAVAILABLE; // Default to 503 if no response reached
     
-    for attempt in 0..max_attempts {
-        // 2. 模型路由解析
-        let mut mapped_model = crate::proxy::common::model_mapping::resolve_model_route(
+    // 将 Claude 工具转为 Value 数组以便探测联网
+    let tools_val: Option<Vec<Value>> = request_for_body.tools.as_ref().map(|list| {
+        list.iter().map(|t| serde_json::to_value(t).unwrap_or(json!({}))).collect()
+    });
+
+    // 2. 模型路由与配置解析 (提前解析以确定请求类型)
+    // 先不应用家族映射，获取初步的 mapped_model
+    let initial_route_plan = crate::proxy::common::model_mapping::resolve_model_route_plan(
+        &request_for_body.model,
+        &*state.custom_mapping.read().await,
+        &*state.openai_mapping.read().await,
+        &*state.anthropic_mapping.read().await,
+        &*state.model_strategies.read().await,
+        false,  // 先不应用家族映射
+    );
+
+    let config_probe = crate::proxy::mappers::common_utils::resolve_request_config(
+        &request_for_body.model, 
+        &initial_route_plan.primary, 
+        &tools_val,
+        request.size.as_deref(),     
+        request.quality.as_deref()
+    );
+
+    // 3. 根据 request_type 决定是否应用 Claude 家族映射
+    // request_type == "agent" 表示 CLI 请求，应该应用家族映射
+    // 其他类型（web_search, image_gen）不应用家族映射
+    let is_cli_request = config_probe.request_type == "agent";
+
+    let route_plan = if is_cli_request {
+        crate::proxy::common::model_mapping::resolve_model_route_plan(
             &request_for_body.model,
             &*state.custom_mapping.read().await,
-        );
-        last_mapped_model = Some(mapped_model.clone());
-        
-        // 将 Claude 工具转为 Value 数组以便探测联网
-        let tools_val: Option<Vec<Value>> = request_for_body.tools.as_ref().map(|list| {
-            list.iter().map(|t| serde_json::to_value(t).unwrap_or(json!({}))).collect()
-        });
+            &*state.openai_mapping.read().await,
+            &*state.anthropic_mapping.read().await,
+            &*state.model_strategies.read().await,
+            true,  // CLI 请求应用家族映射
+        )
+    } else {
+        initial_route_plan
+    };
+
+    let mut model_candidates = route_plan.candidates();
+    let max_models = route_plan.max_models();
+    if model_candidates.is_empty() {
+        model_candidates.push(request_for_body.model.clone());
+    }
+    model_candidates.truncate(max_models);
+
+    // 0. 尝试提取 session_id 用于粘性调度 (Phase 2/3)
+    // 使用 SessionManager 生成稳定的会话指纹
+    let session_id_str = crate::proxy::session_manager::SessionManager::extract_session_id(&request_for_body);
+    let session_id = Some(session_id_str.as_str());
+
+    for (model_index, candidate_model) in model_candidates.iter().enumerate() {
+        let is_last_model = model_index + 1 >= model_candidates.len();
+        let mut switched_model = false;
 
         let config = crate::proxy::mappers::common_utils::resolve_request_config(
-            &request_for_body.model,
-            &mapped_model,
-            &tools_val,
-            request.size.as_deref(),      // [NEW] Pass size parameter
-            request.quality.as_deref()    // [NEW] Pass quality parameter
+            &request_for_body.model, 
+            candidate_model, 
+            &tools_val, 
+            request.size.as_deref(), 
+            request.quality.as_deref()
         );
 
-        // 0. 尝试提取 session_id 用于粘性调度 (Phase 2/3)
-        // 使用 SessionManager 生成稳定的会话指纹
-        let session_id_str = crate::proxy::session_manager::SessionManager::extract_session_id(&request_for_body);
-        let session_id = Some(session_id_str.as_str());
+        for attempt in 0..max_attempts {
+            let mut mapped_model = candidate_model.clone();
+            last_mapped_model = Some(candidate_model.clone()); // Update tracking
 
-        let force_rotate_token = attempt > 0;
-        let (access_token, project_id, email, _wait_ms) = match token_manager.get_token(&config.request_type, force_rotate_token, session_id, &config.final_model).await {
+            let force_rotate_token = attempt > 0;
+            let (access_token, project_id, email, _wait_ms) = match token_manager.get_token(&config.request_type, force_rotate_token, session_id, &config.final_model).await {
             Ok(t) => t,
             Err(e) => {
                 let safe_message = if e.contains("invalid_grant") {
@@ -437,7 +484,10 @@ pub async fn handle_messages(
             // 否则会直接使用 generic ID 导致下游无法识别或只能使用静态默认值
             let resolved_model = crate::proxy::common::model_mapping::resolve_model_route(
                 virtual_model_id, 
-                &*state.custom_mapping.read().await
+                &*state.custom_mapping.read().await,
+                &*state.openai_mapping.read().await,
+                &*state.anthropic_mapping.read().await,
+                true
             );
 
             info!(
@@ -1006,6 +1056,11 @@ pub async fn handle_messages(
             }
         }
 
+        if route_plan.is_capacity_first() && should_rotate_account(status_code) && !is_last_model {
+            switched_model = true;
+            break;
+        }
+
         // 5. 统一处理所有可重试错误
         // [REMOVED] 不再特殊处理 QUOTA_EXHAUSTED,允许账号轮换
         // 原逻辑会在第一个账号配额耗尽时直接返回,导致"平衡"模式无法切换账号
@@ -1043,6 +1098,33 @@ pub async fn handle_messages(
             error!("[{}] Non-retryable error {}: {}", trace_id, status_code, error_text);
             return (status, [("X-Account-Email", email.as_str())], error_text).into_response();
         }
+    }
+
+    if switched_model {
+        if route_plan.policy.stickiness == crate::proxy::config::ModelStickiness::Weak {
+            token_manager.clear_session_binding(session_id_str.as_str());
+        }
+        tracing::warn!(
+            "[Router] Strategy fallback (Claude): {} -> {}",
+            candidate_model,
+            model_candidates
+                .get(model_index + 1)
+                .unwrap_or(candidate_model)
+        );
+        continue;
+    }
+    if !is_last_model {
+        if route_plan.policy.stickiness == crate::proxy::config::ModelStickiness::Weak {
+            token_manager.clear_session_binding(session_id_str.as_str());
+        }
+        tracing::warn!(
+            "[Router] Strategy fallback (Claude): {} -> {}",
+            candidate_model,
+            model_candidates
+                .get(model_index + 1)
+                .unwrap_or(candidate_model)
+        );
+    }
     }
     
     

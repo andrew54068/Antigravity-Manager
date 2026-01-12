@@ -14,6 +14,8 @@ interface ModalDialogProps {
     confirmText?: string;
     cancelText?: string;
     isDestructive?: boolean;
+    children?: React.ReactNode;
+    footer?: React.ReactNode;
 }
 
 export default function ModalDialog({
@@ -25,7 +27,9 @@ export default function ModalDialog({
     onCancel,
     confirmText,
     cancelText,
-    isDestructive = false
+    isDestructive = false,
+    children,
+    footer
 }: ModalDialogProps) {
     const { t } = useTranslation();
     const finalConfirmText = confirmText || t('common.confirm');
@@ -72,7 +76,18 @@ export default function ModalDialog({
                     <h3 className="text-xl font-bold text-gray-900 dark:text-base-content mb-2">{title}</h3>
                     <p className="text-gray-500 dark:text-gray-400 text-sm mb-8 leading-relaxed px-4">{message}</p>
 
-                    <div className="flex gap-3 w-full">
+                    {children && (
+                        <div className="w-full text-left mb-6">
+                            {children}
+                        </div>
+                    )}
+                    
+                    {footer ? (
+                         <div className="w-full">
+                            {footer}
+                         </div>
+                    ) : (
+                        <div className="flex gap-3 w-full">
                         {showCancel && (
                             <button
                                 className="flex-1 px-4 py-2.5 bg-gray-100 dark:bg-base-200 text-gray-700 dark:text-gray-300 font-medium rounded-xl hover:bg-gray-200 dark:hover:bg-base-300 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-base-300"
@@ -91,6 +106,7 @@ export default function ModalDialog({
                             {finalConfirmText}
                         </button>
                     </div>
+                    )}
                 </div>
             </div>
             <div className="modal-backdrop bg-black/40 backdrop-blur-sm fixed inset-0 z-[-1]" onClick={showCancel ? onCancel : undefined}></div>

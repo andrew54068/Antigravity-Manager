@@ -22,6 +22,7 @@ const CONSTRAINT_FIELDS: &[(&str, &str)] = &[
 /// 全局工具适配器注册表
 /// 
 /// 所有注册的适配器都会在 Schema 清洗时被检查和应用
+#[allow(dead_code)]
 static TOOL_ADAPTERS: Lazy<Vec<Box<dyn ToolAdapter>>> = Lazy::new(|| {
     vec![
         Box::new(PencilAdapter),
@@ -74,6 +75,7 @@ pub fn clean_json_schema(value: &mut Value) {
 /// 2. 执行适配器的预处理 (工具特定优化)
 /// 3. 执行通用清洗逻辑
 /// 4. 执行适配器的后处理 (最终调整)
+#[allow(dead_code)]
 pub fn clean_json_schema_for_tool(value: &mut Value, tool_name: &str) {
     // 1. 查找匹配的适配器
     let adapter = TOOL_ADAPTERS.iter()
