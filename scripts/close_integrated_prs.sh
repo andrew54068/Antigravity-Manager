@@ -36,7 +36,9 @@ echo ""
 
 # PR 列表：PR号 作者 标题
 declare -A PRS=(
-    ["769"]="i-smile|Fix: Suppress console flashing on Windows & update Auth UI status"
+    ["825"]="IamAshrafee|[Internationalization] Device Fingerprint Dialog localization"
+    ["822"]="Koshikai|[Japanese] Add missing translations and refine terminology"
+    ["798"]="vietnhatthai|[Translation Fix] Correct spelling error in Vietnamese settings"
 )
 
 # 检查 GitHub CLI 是否已安装
