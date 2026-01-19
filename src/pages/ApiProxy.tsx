@@ -328,18 +328,20 @@ export default function ApiProxy() {
 
         console.log('[DEBUG] handleMappingUpdate called:', { type, key, value });
 
-        const newConfig = { ...appConfig.proxy };
+        const newProxyConfig = { ...appConfig.proxy };
         if (type === 'anthropic') {
-            newConfig.anthropic_mapping = { ...(newConfig.anthropic_mapping || {}), [key]: value };
+            newProxyConfig.anthropic_mapping = { ...(newProxyConfig.anthropic_mapping || {}), [key]: value };
         } else if (type === 'openai') {
-            newConfig.openai_mapping = { ...(newConfig.openai_mapping || {}), [key]: value };
+            newProxyConfig.openai_mapping = { ...(newProxyConfig.openai_mapping || {}), [key]: value };
         } else {
-            newConfig.custom_mapping = { ...(newConfig.custom_mapping || {}), [key]: value };
+            newProxyConfig.custom_mapping = { ...(newProxyConfig.custom_mapping || {}), [key]: value };
         }
 
+        const newAppConfig = { ...appConfig, proxy: newProxyConfig };
+
         try {
-            await invoke('update_model_mapping', { config: newConfig });
-            setAppConfig({ ...appConfig, proxy: newConfig });
+            await invoke('save_config', { config: newAppConfig });
+            setAppConfig(newAppConfig);
             console.log('[DEBUG] Mapping updated successfully');
             showToast(t('common.saved'), 'success');
         } catch (error) {

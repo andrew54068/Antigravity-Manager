@@ -40,8 +40,16 @@ pub fn load_app_config() -> Result<AppConfig, String> {
                     }
                 }
             }
-            // Remove old field
-            proxy.as_object_mut().unwrap().remove("anthropic_mapping");
+            // Remove keys that were migrated
+            let keys_to_remove: Vec<String> = anthropic.keys()
+                .filter(|k| !k.ends_with("-series"))
+                .cloned()
+                .collect();
+
+            for k in keys_to_remove {
+                anthropic.remove(&k);
+            }
+
             modified = true;
         }
 
@@ -54,8 +62,17 @@ pub fn load_app_config() -> Result<AppConfig, String> {
                     }
                 }
             }
-            // Remove old field
-            proxy.as_object_mut().unwrap().remove("openai_mapping");
+
+            // Remove keys that were migrated
+            let keys_to_remove: Vec<String> = openai.keys()
+                .filter(|k| !k.ends_with("-series"))
+                .cloned()
+                .collect();
+
+            for k in keys_to_remove {
+                openai.remove(&k);
+            }
+
             modified = true;
         }
 
