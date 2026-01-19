@@ -1621,24 +1621,30 @@ print(response.text)`;
                             <div className="p-3 space-y-3">
                                 {/* 策略池 */}
                                 <div>
-                                    <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                                        <Sparkles size={14} /> {t('proxy.router.strategy_title')}
-                                    </h3>
-                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                                        <div className="lg:col-span-1 bg-white dark:bg-base-100 border border-gray-100 dark:border-base-200 rounded-xl p-3 shadow-sm">
-                                            <div className="flex items-center justify-between mb-2">
-                                                <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <div className="w-6 h-6 rounded-md bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                                            <Sparkles size={14} />
+                                        </div>
+                                        <h3 className="text-sm font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wide">
+                                            {t('proxy.router.strategy_title')}
+                                        </h3>
+                                    </div>
+                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                        <div className="lg:col-span-1 bg-white dark:bg-base-100 border border-gray-100 dark:border-base-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                                    <Edit2 size={14} className="text-gray-400" />
                                                     {t('proxy.router.strategy_editor')}
                                                 </span>
                                                 {editingStrategyId && (
-                                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300">
+                                                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300 font-medium">
                                                         {t('proxy.router.strategy_editing', { id: editingStrategyId })}
                                                     </span>
                                                 )}
                                             </div>
-                                            <div className="space-y-2">
+                                            <div className="space-y-4">
                                                 <div>
-                                                    <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-1">
+                                                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                                                         {t('proxy.router.strategy_id')}
                                                     </label>
                                                     <input
@@ -1647,132 +1653,158 @@ print(response.text)`;
                                                         onChange={(e) => setStrategyDraftId(e.target.value)}
                                                         disabled={!!editingStrategyId}
                                                         placeholder="claude-4.5-fallback"
-                                                        className="input input-xs input-bordered w-full font-mono text-[11px] bg-white dark:bg-base-100 border-gray-200 dark:border-gray-700 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                        className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-base-200 rounded-lg bg-white dark:bg-base-200 text-xs text-gray-900 dark:text-base-content focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed font-mono shadow-sm transition-all"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-1">
+                                                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                                                         {t('proxy.router.strategy_candidates')}
                                                     </label>
                                                     <textarea
                                                         value={strategyDraftCandidates}
                                                         onChange={(e) => setStrategyDraftCandidates(e.target.value)}
                                                         placeholder={t('proxy.router.strategy_candidates_placeholder')}
-                                                        rows={4}
-                                                        className="textarea textarea-bordered w-full text-[11px] font-mono bg-white dark:bg-base-100 border-gray-200 dark:border-gray-700 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                                        rows={5}
+                                                        className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-base-200 rounded-lg bg-white dark:bg-base-200 text-xs text-gray-900 dark:text-base-content focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all font-mono leading-relaxed"
                                                     />
-                                                    <p className="mt-1 text-[10px] text-gray-400">
+                                                    <p className="mt-1.5 text-xs text-gray-400">
                                                         {t('proxy.router.strategy_candidates_hint')}
                                                     </p>
                                                 </div>
-                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                     <div>
-                                                        <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-1">
+                                                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                                                             {t('proxy.router.strategy_priority')}
                                                         </label>
                                                         <select
                                                             value={strategyDraftPriority}
                                                             onChange={(e) => setStrategyDraftPriority(e.target.value as ModelPriority)}
-                                                            className="select select-xs select-bordered w-full text-[11px] bg-white dark:bg-base-100 border-gray-200 dark:border-gray-700"
+                                                            className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-base-200 rounded-lg bg-white dark:bg-base-200 text-xs text-gray-900 dark:text-base-content focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                                         >
                                                             <option value="accuracy_first">{t('proxy.router.strategy_priority_accuracy')}</option>
                                                             <option value="capacity_first">{t('proxy.router.strategy_priority_capacity')}</option>
                                                         </select>
                                                     </div>
                                                     <div>
-                                                        <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-1">
+                                                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                                                             {t('proxy.router.strategy_stickiness')}
                                                         </label>
                                                         <select
                                                             value={strategyDraftStickiness}
                                                             onChange={(e) => setStrategyDraftStickiness(e.target.value as ModelStickiness)}
-                                                            className="select select-xs select-bordered w-full text-[11px] bg-white dark:bg-base-100 border-gray-200 dark:border-gray-700"
+                                                            className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-base-200 rounded-lg bg-white dark:bg-base-200 text-xs text-gray-900 dark:text-base-content focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                                         >
                                                             <option value="strong">{t('proxy.router.strategy_stickiness_strong')}</option>
                                                             <option value="weak">{t('proxy.router.strategy_stickiness_weak')}</option>
                                                         </select>
                                                     </div>
-                                                    <div>
-                                                        <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-1">
+                                                    <div className="sm:col-span-2">
+                                                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                                                             {t('proxy.router.strategy_max_hops')}
                                                         </label>
-                                                        <input
-                                                            type="number"
-                                                            min={1}
-                                                            value={strategyDraftMaxHops}
-                                                            onChange={(e) => setStrategyDraftMaxHops(e.target.value)}
-                                                            placeholder={t('proxy.router.strategy_max_hops_placeholder')}
-                                                            className="input input-xs input-bordered w-full text-[11px] bg-white dark:bg-base-100 border-gray-200 dark:border-gray-700"
-                                                        />
+                                                        <div className="relative">
+                                                            <input
+                                                                type="number"
+                                                                min={1}
+                                                                value={strategyDraftMaxHops}
+                                                                onChange={(e) => setStrategyDraftMaxHops(e.target.value)}
+                                                                placeholder={t('proxy.router.strategy_max_hops_placeholder')}
+                                                                className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-base-200 rounded-lg bg-white dark:bg-base-200 text-xs text-gray-900 dark:text-base-content focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-8 shadow-sm transition-all"
+                                                            />
+                                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400">
+                                                                <Activity size={12} />
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-2 pt-1">
+                                                <div className="flex items-center gap-3 pt-2">
                                                     <button
-                                                        className="btn btn-xs gap-2 bg-blue-600 hover:bg-blue-700 text-white border-none shadow-md"
+                                                        className="btn btn-sm flex-1 gap-2 bg-blue-600 hover:bg-blue-700 text-white border-none shadow-md hover:shadow-lg transition-all"
                                                         onClick={handleSaveStrategy}
                                                     >
-                                                        <CheckCircle size={12} />
+                                                        <CheckCircle size={14} />
                                                         {t('common.save')}
                                                     </button>
                                                     <button
-                                                        className="btn btn-xs gap-2 btn-ghost text-gray-500"
+                                                        className="btn btn-sm flex-1 gap-2 btn-ghost text-gray-500 hover:bg-gray-100 dark:hover:bg-base-200"
                                                         onClick={resetStrategyDraft}
                                                     >
+                                                        <X size={14} />
                                                         {t('common.clear')}
                                                     </button>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div className="lg:col-span-2 bg-white dark:bg-base-100 border border-gray-100 dark:border-base-200 rounded-xl p-3 shadow-sm">
-                                            <div className="flex items-center justify-between mb-2">
-                                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                        <div className="lg:col-span-2 bg-white dark:bg-base-100 border border-gray-100 dark:border-base-200 rounded-xl p-5 shadow-sm min-h-[400px] flex flex-col">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <span className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                                    <Layers size={14} className="text-gray-400" />
                                                     {t('proxy.router.strategy_list')}
                                                 </span>
+                                                <div className="text-xs text-gray-400">
+                                                    {strategyEntries.length} {t('proxy.router.strategies_count') || 'strategies'}
+                                                </div>
                                             </div>
-                                            <div className="overflow-y-auto max-h-[220px] border border-gray-100 dark:border-base-200 rounded-lg bg-gray-50/30 dark:bg-base-200/30">
-                                                <table className="table table-xs w-full bg-white dark:bg-base-100">
+                                            <div className="flex-1 overflow-y-auto border border-gray-100 dark:border-base-200 rounded-lg">
+                                                <table className="table table-sm w-full bg-white dark:bg-base-100">
                                                     <thead className="sticky top-0 bg-gray-50/95 dark:bg-base-200/95 backdrop-blur shadow-sm z-10 text-gray-500 dark:text-gray-400">
                                                         <tr>
-                                                            <th className="text-[10px] py-2 font-medium">{t('proxy.router.strategy_id')}</th>
-                                                            <th className="text-[10px] py-2 font-medium">{t('proxy.router.strategy_candidates')}</th>
-                                                            <th className="text-[10px] py-2 font-medium">{t('proxy.router.strategy_policy')}</th>
-                                                            <th className="text-[10px] w-16 text-center py-2 font-medium">{t('common.action')}</th>
+                                                            <th className="text-xs py-3 font-medium pl-4">{t('proxy.router.strategy_id')}</th>
+                                                            <th className="text-xs py-3 font-medium">{t('proxy.router.strategy_candidates')}</th>
+                                                            <th className="text-xs py-3 font-medium">{t('proxy.router.strategy_policy')}</th>
+                                                            <th className="text-xs w-20 text-center py-3 font-medium pr-4">{t('common.action')}</th>
                                                         </tr>
                                                     </thead>
-                                                    <tbody className="font-mono text-[10px]">
+                                                    <tbody className="font-mono text-xs">
                                                         {strategyEntries.length > 0 ? (
                                                             strategyEntries.map(([id, strategy]) => (
                                                                 <tr
                                                                     key={id}
-                                                                    className={`hover:bg-gray-100 dark:hover:bg-base-300 transition-colors ${editingStrategyId === id ? 'bg-blue-50/60 dark:bg-blue-900/20' : ''}`}
+                                                                    className={`hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors border-b border-gray-50 dark:border-base-200 last:border-none ${editingStrategyId === id ? 'bg-blue-50/80 dark:bg-blue-900/20' : ''}`}
                                                                 >
-                                                                    <td className="font-bold text-blue-600 dark:text-blue-400">{id}</td>
-                                                                    <td className="max-w-[220px] truncate" title={strategy.candidates.join(', ')}>
-                                                                        {strategy.candidates.join(', ')}
+                                                                    <td className="font-bold text-blue-600 dark:text-blue-400 pl-4 py-3">{id}</td>
+                                                                    <td className="max-w-[200px] truncate py-3" title={strategy.candidates.join(', ')}>
+                                                                        <div className="flex flex-wrap gap-1">
+                                                                            {strategy.candidates.slice(0, 2).map(c => (
+                                                                                <span key={c} className="px-1.5 py-0.5 rounded text-[10px] bg-gray-100 dark:bg-base-300 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+                                                                                    {c}
+                                                                                </span>
+                                                                            ))}
+                                                                            {strategy.candidates.length > 2 && (
+                                                                                <span className="px-1.5 py-0.5 rounded text-[10px] bg-gray-100 dark:bg-base-300 text-gray-500 border border-gray-200 dark:border-gray-700">
+                                                                                    +{strategy.candidates.length - 2}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
                                                                     </td>
-                                                                    <td className="text-gray-500 dark:text-gray-400">
-                                                                        {[
-                                                                            t(`proxy.router.strategy_priority_${strategy.policy?.model_priority || 'accuracy_first'}`),
-                                                                            t(`proxy.router.strategy_stickiness_${strategy.policy?.stickiness || 'strong'}`),
-                                                                            strategy.policy?.max_model_hops
-                                                                                ? t('proxy.router.strategy_max_hops_value', { count: strategy.policy.max_model_hops })
-                                                                                : t('proxy.router.strategy_max_hops_unlimited')
-                                                                        ].filter(Boolean).join(' · ')}
+                                                                    <td className="text-gray-500 dark:text-gray-400 py-3">
+                                                                        <div className="flex flex-col gap-1">
+                                                                            <span className="flex items-center gap-1.5">
+                                                                                <Target size={10} />
+                                                                                {t(`proxy.router.strategy_priority_${strategy.policy?.model_priority || 'accuracy_first'}`)}
+                                                                            </span>
+                                                                            <span className="flex items-center gap-1.5 opacity-75">
+                                                                                 <Wind size={10} />
+                                                                                {t(`proxy.router.strategy_stickiness_${strategy.policy?.stickiness || 'strong'}`)}
+                                                                            </span>
+                                                                        </div>
                                                                     </td>
-                                                                    <td className="text-center">
-                                                                        <div className="flex items-center justify-center gap-2">
+                                                                    <td className="text-center pr-4 py-3">
+                                                                        <div className="flex items-center justify-center gap-1">
                                                                             <button
-                                                                                className="btn btn-ghost btn-xs text-gray-500 p-0 h-auto min-h-0"
+                                                                                className="btn btn-ghost btn-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                                                                                 onClick={() => handleEditStrategy(id)}
+                                                                                title={t('common.edit')}
                                                                             >
-                                                                                <PencilLine size={12} />
+                                                                                <PencilLine size={14} />
                                                                             </button>
                                                                             <button
-                                                                                className="btn btn-ghost btn-xs text-error p-0 h-auto min-h-0"
+                                                                                className="btn btn-ghost btn-xs text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                                                                                 onClick={() => handleDeleteStrategy(id)}
+                                                                                title={t('common.delete')}
                                                                             >
-                                                                                <Trash2 size={12} />
+                                                                                <Trash2 size={14} />
                                                                             </button>
                                                                         </div>
                                                                     </td>
@@ -1780,8 +1812,11 @@ print(response.text)`;
                                                             ))
                                                         ) : (
                                                             <tr>
-                                                                <td colSpan={4} className="text-center py-2 text-gray-400 italic">
-                                                                    {t('proxy.router.strategy_empty')}
+                                                                <td colSpan={4} className="text-center py-8 text-gray-400 italic">
+                                                                    <div className="flex flex-col items-center gap-2 opacity-50">
+                                                                        <BrainCircuit size={24} />
+                                                                        <p>{t('proxy.router.strategy_empty')}</p>
+                                                                    </div>
                                                                 </td>
                                                             </tr>
                                                         )}
