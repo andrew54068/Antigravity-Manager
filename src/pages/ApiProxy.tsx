@@ -22,7 +22,8 @@ import {
     Check,
     X,
     Edit2,
-    PencilLine
+    PencilLine,
+    Activity
 } from 'lucide-react';
 import { AppConfig, ProxyConfig, StickySessionConfig, ExperimentalConfig, ModelPriority, ModelStickiness, ModelStrategy } from '../types/config';
 import HelpTooltip from '../components/common/HelpTooltip';
