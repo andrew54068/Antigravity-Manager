@@ -169,7 +169,25 @@ impl ModelQueue {
 
         let semaphore: Arc<Semaphore> = {
             let read = self.semaphores.read().unwrap();
-            read.get(&model_key)?.clone()
+            if let Some(sem) = read.get(&model_key) {
+                sem.clone()
+            } else {
+                drop(read);
+                let mut write = self.semaphores.write().unwrap();
+                if let Some(sem) = write.get(&model_key) {
+                    sem.clone()
+                } else {
+                    let concurrency = self.get_concurrency(&model_key);
+                    let sem = Arc::new(Semaphore::new(concurrency));
+                    tracing::info!(
+                        "[ModelQueue] Created semaphore for '{}' with concurrency={}",
+                        model_key,
+                        concurrency
+                    );
+                    write.insert(model_key.clone(), sem.clone());
+                    sem
+                }
+            }
         };
 
         let permit = semaphore.clone().try_acquire_owned().ok()?;
