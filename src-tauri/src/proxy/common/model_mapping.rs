@@ -134,7 +134,7 @@ pub async fn get_all_dynamic_models(
 
 /// 通配符匹配辅助函数
 /// 支持简单的 * 通配符匹配
-/// 
+///
 /// # 示例
 /// - `gpt-4*` 匹配 `gpt-4`, `gpt-4-turbo`, `gpt-4-0613` 等
 /// - `claude-3-5-sonnet-*` 匹配所有 3.5 sonnet 版本
@@ -146,6 +146,103 @@ fn wildcard_match(pattern: &str, text: &str) -> bool {
         text.starts_with(prefix) && text.ends_with(suffix)
     } else {
         pattern == text
+    }
+}
+
+/// 获取所有已知的模型名称（用于通配符展开）
+/// 包括内置模型、常用 Gemini 模型和 Claude 模型
+fn get_all_known_models() -> Vec<String> {
+    let mut models = Vec::new();
+
+    // 1. 获取所有内置映射的模型
+    for model in CLAUDE_TO_GEMINI.keys() {
+        models.push(model.to_string());
+    }
+
+    // 2. 添加常用的 Claude 模型变体
+    let claude_models = vec![
+        "claude-opus-4-5-thinking",
+        "claude-sonnet-4-5",
+        "claude-sonnet-4-5-thinking",
+        "claude-3-5-sonnet-20241022",
+        "claude-3-5-sonnet-20240620",
+        "claude-haiku-4",
+        "claude-haiku-4-5-20251001",
+        "claude-opus-4",
+        "claude-opus-4-5-20251101",
+    ];
+    for model in claude_models {
+        if !models.contains(&model.to_string()) {
+            models.push(model.to_string());
+        }
+    }
+
+    // 3. 添加常用的 Gemini 模型
+    let gemini_models = vec![
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-flash-thinking",
+        "gemini-3-flash",
+        "gemini-3-pro-preview",
+        "gemini-3-pro-low",
+        "gemini-3-pro-high",
+        "gemini-3-pro-image",
+        "gemini-2.0-flash-exp",
+    ];
+    for model in gemini_models {
+        if !models.contains(&model.to_string()) {
+            models.push(model.to_string());
+        }
+    }
+
+    models
+}
+
+/// 展开通配符候选模型
+///
+/// # 参数
+/// - `pattern`: 可能包含通配符的模型名称模式，如 "claude-sonnet-4*"
+///
+/// # 返回
+/// - 如果 pattern 不包含通配符，返回包含原始 pattern 的单元素 Vec
+/// - 如果 pattern 包含通配符，返回所有匹配的模型名称列表
+///
+/// # 示例
+/// ```
+/// expand_wildcard_candidate("claude-sonnet-4*")
+/// // => ["claude-sonnet-4-5", "claude-sonnet-4-5-thinking"]
+///
+/// expand_wildcard_candidate("gemini-3-*")
+/// // => ["gemini-3-flash", "gemini-3-pro-preview", "gemini-3-pro-low", ...]
+/// ```
+fn expand_wildcard_candidate(pattern: &str) -> Vec<String> {
+    // 如果不包含通配符，直接返回
+    if !pattern.contains('*') {
+        return vec![pattern.to_string()];
+    }
+
+    let known_models = get_all_known_models();
+    let mut matches = Vec::new();
+
+    for model in known_models {
+        if wildcard_match(pattern, &model) {
+            matches.push(model);
+        }
+    }
+
+    // 如果没有匹配到任何模型，返回原始 pattern（让后续逻辑处理）
+    if matches.is_empty() {
+        crate::modules::logger::log_warn(&format!(
+            "[Router] Wildcard pattern '{}' matched no known models",
+            pattern
+        ));
+        vec![pattern.to_string()]
+    } else {
+        crate::modules::logger::log_info(&format!(
+            "[Router] Expanded wildcard '{}' to {} models: {:?}",
+            pattern, matches.len(), matches
+        ));
+        matches
     }
 }
 
@@ -337,12 +434,18 @@ pub fn resolve_model_route_plan(
 
     if let Some(strategy_id) = extract_strategy_id(&target) {
         if let Some(strategy) = model_strategies.get(strategy_id) {
-            let mut candidates: Vec<String> = strategy
-                .candidates
-                .iter()
-                .map(|c| c.trim().to_string())
-                .filter(|c| !c.is_empty() && !c.starts_with("strategy:"))
-                .collect();
+            // 展开通配符候选模型
+            let mut candidates: Vec<String> = Vec::new();
+            for pattern in &strategy.candidates {
+                let trimmed = pattern.trim();
+                if trimmed.is_empty() || trimmed.starts_with("strategy:") {
+                    continue;
+                }
+                // 展开通配符（如果包含 *）
+                let expanded = expand_wildcard_candidate(trimmed);
+                candidates.extend(expanded);
+            }
+
             if !candidates.is_empty() {
                 let primary = candidates.remove(0);
                 return ModelRoutePlan {
