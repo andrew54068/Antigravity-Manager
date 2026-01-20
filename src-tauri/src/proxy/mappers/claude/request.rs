@@ -911,14 +911,14 @@ fn build_contents(
                             match cached_family {
                                 Some(family) => {
                                     // Check compatibility
-                                    // [NEW] If is_retry is true, force incompatibility to strip historical signatures
-                                    // which likely caused the previous 400 error.
-                                    let compatible = !is_retry && is_model_compatible(&family, mapped_model);
-                                    
+                                    // [FIX #790] Removed aggressive is_retry stripping - it was causing 400 errors
+                                    // by stripping ALL signatures even when they were valid.
+                                    // Now we only check model compatibility, not retry state.
+                                    let compatible = is_model_compatible(&family, mapped_model);
+
                                     if !compatible {
                                         tracing::warn!(
-                                            "[Thinking-Signature] {} signature (Family: {}, Target: {}). Downgrading to text.",
-                                            if is_retry { "Stripping historical" } else { "Incompatible" },
+                                            "[Thinking-Signature] Incompatible signature (Family: {}, Target: {}). Downgrading to text.",
                                             family, mapped_model
                                         );
                                         parts.push(json!({"text": thinking}));
@@ -1294,6 +1294,9 @@ fn build_contents(
 }
 
 /// 构建 Contents (Messages)
+/// [FIX #790] Changed return type from Result<Value, String> to Result<Vec<Value>, String>
+/// to allow returning BOTH the synthetic user message AND the original assistant message
+/// when repairing interrupted tool chains.
 fn build_google_content(
     msg: &Message,
     claude_req: &ClaudeRequest,
@@ -1308,17 +1311,21 @@ fn build_google_content(
     last_user_task_text_normalized: &mut Option<String>,
     previous_was_tool_result: &mut bool,
     existing_tool_result_ids: &std::collections::HashSet<String>,
-) -> Result<Value, String> {
+) -> Result<Vec<Value>, String> {
     let role = if msg.role == "assistant" {
         "model"
     } else {
         &msg.role
     };
 
+    let mut result_contents: Vec<Value> = Vec::new();
+
     // Proactive Tool Chain Repair:
     // If we are about to process an Assistant message, but we still have pending tool_use_ids,
     // it means the previous turn was interrupted or the user ignored the tool.
     // We MUST inject a synthetic User message with error results to close the loop.
+    // [FIX #790] Now we add the synthetic message to result_contents AND continue processing
+    // the original message, instead of returning early and skipping it.
     if role == "model" && !pending_tool_use_ids.is_empty() {
         tracing::warn!("[Elastic-Recovery] Detected interrupted tool chain (Assistant -> Assistant). Injecting synthetic User message for IDs: {:?}", pending_tool_use_ids);
 
@@ -1338,12 +1345,13 @@ fn build_google_content(
             }).collect();
 
         if !synthetic_parts.is_empty() {
-            return Ok(json!({
+            // [FIX #790] Add synthetic message to results but DON'T return early
+            result_contents.push(json!({
                 "role": "user",
                 "parts": synthetic_parts
             }));
         }
-        // Clear pending IDs as we have handled them
+        // [FIX #790] Always clear pending IDs after handling (was dead code before)
         pending_tool_use_ids.clear();
     }
 
@@ -1364,14 +1372,15 @@ fn build_google_content(
         existing_tool_result_ids,
     )?;
 
-    if parts.is_empty() {
-        return Ok(json!(null)); // Indicate no content to add
+    // [FIX #790] Add the actual message content if not empty
+    if !parts.is_empty() {
+        result_contents.push(json!({
+            "role": role,
+            "parts": parts
+        }));
     }
 
-    Ok(json!({
-        "role": role,
-        "parts": parts
-    }))
+    Ok(result_contents)
 }
 
 /// 构建 Contents (Messages)
@@ -1411,7 +1420,7 @@ fn build_google_contents(
     }
 
     for (_i, msg) in messages.iter().enumerate() {
-        let google_content = build_google_content(
+        let google_contents_for_msg = build_google_content(
             msg,
             claude_req,
             is_thinking_enabled,
@@ -1427,9 +1436,8 @@ fn build_google_contents(
             &existing_tool_result_ids,
         )?;
 
-        if !google_content.is_null() {
-            contents.push(google_content);
-        }
+        // [FIX #790] Now we extend with all returned contents (may include synthetic + original)
+        contents.extend(google_contents_for_msg);
     }
 
     // [Removed] ensure_last_assistant_has_thinking
