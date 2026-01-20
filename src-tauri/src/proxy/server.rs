@@ -33,6 +33,8 @@ pub struct AppState {
     pub zai_vision_mcp: Arc<crate::proxy::zai_vision_mcp::ZaiVisionMcpState>,
     pub monitor: Arc<crate::proxy::monitor::ProxyMonitor>,
     pub experimental: Arc<RwLock<crate::proxy::config::ExperimentalConfig>>,
+    /// Model-specific request queue to prevent thundering herd on capacity-limited models
+    pub model_queue: Arc<crate::proxy::upstream::queue::ModelQueue>,
 }
 
 /// Axum 服务器实例
@@ -121,6 +123,7 @@ impl AxumServer {
 	        let zai_vision_mcp_state =
 	            Arc::new(crate::proxy::zai_vision_mcp::ZaiVisionMcpState::new());
 	        let experimental_state = Arc::new(RwLock::new(experimental_config));
+	        let model_queue = Arc::new(crate::proxy::upstream::queue::ModelQueue::new());
 
 	        let state = AppState {
 	            token_manager: token_manager.clone(),
@@ -141,6 +144,7 @@ impl AxumServer {
             zai_vision_mcp: zai_vision_mcp_state,
             monitor: monitor.clone(),
             experimental: experimental_state.clone(),
+            model_queue,
         };
 
 

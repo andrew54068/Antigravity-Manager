@@ -847,7 +847,15 @@ pub async fn handle_messages(
             tracing::debug!("[{}] Added Beta Header: interleaved-thinking-2025-05-14", trace_id);
         }
 
-        // 5. 上游调用
+        // 5. 上游调用 - 使用 ModelQueue 防止 thundering herd
+        // Acquire a permit from the model queue to serialize requests to capacity-limited models
+        let _queue_permit = state.model_queue.acquire(&request_with_mapped.model).await;
+        tracing::debug!(
+            "[{}] Acquired queue permit for model '{}', proceeding with upstream call",
+            trace_id,
+            request_with_mapped.model
+        );
+
         let response = match upstream
             .call_v1_internal_with_headers(method, &access_token, gemini_body, query, extra_headers.clone())
             .await {
