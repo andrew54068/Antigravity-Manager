@@ -208,6 +208,33 @@ impl Default for ExperimentalConfig {
     }
 }
 
+/// 路由分组开关配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteGroupsConfig {
+    #[serde(default = "default_true")]
+    pub claude_45_enabled: bool,
+    #[serde(default = "default_true")]
+    pub claude_35_enabled: bool,
+    #[serde(default = "default_true")]
+    pub gpt_4_enabled: bool,
+    #[serde(default = "default_true")]
+    pub gpt_4o_enabled: bool,
+    #[serde(default = "default_true")]
+    pub gpt_5_enabled: bool,
+}
+
+impl Default for RouteGroupsConfig {
+    fn default() -> Self {
+        Self {
+            claude_45_enabled: true,
+            claude_35_enabled: true,
+            gpt_4_enabled: true,
+            gpt_4o_enabled: true,
+            gpt_5_enabled: true,
+        }
+    }
+}
+
 fn default_true() -> bool { true }
 
 fn default_false() -> bool { false }
@@ -281,6 +308,10 @@ pub struct ProxyConfig {
     /// 实验性功能配置
     #[serde(default)]
     pub experimental: ExperimentalConfig,
+
+    /// 路由分组开关配置
+    #[serde(default)]
+    pub route_groups: RouteGroupsConfig,
 }
 
 /// 上游代理配置
@@ -311,6 +342,7 @@ impl Default for ProxyConfig {
             zai: ZaiConfig::default(),
             scheduling: crate::proxy::sticky_config::StickySessionConfig::default(),
             experimental: ExperimentalConfig::default(),
+            route_groups: RouteGroupsConfig::default(),
         }
     }
 }
