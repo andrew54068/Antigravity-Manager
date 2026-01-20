@@ -1,5 +1,5 @@
 cask "antigravity-tools" do
-  version "3.3.45"
+  version "3.3.46"
   sha256 :no_check
 
   name "Antigravity Tools"
@@ -7,9 +7,9 @@ cask "antigravity-tools" do
   homepage "https://github.com/lbjlaq/Antigravity-Manager"
 
   on_macos do
-    url "https://github.com/lbjlaq/Antigravity-Manager/releases/download/v#{version}/Antigravity.Tools_#{version}_universal.dmg"
+    url "https://github.com/lbjlaq/Antigravity-Manager/releases/download/v#{version}/Antigravity_Tools_(Maximizer)_#{version}_universal.dmg"
 
-    app "Antigravity Tools.app"
+    app "Antigravity Tools (Maximizer).app"
 
     zap trash: [
       "~/Library/Application Support/com.lbjlaq.antigravity-tools",
@@ -20,7 +20,7 @@ cask "antigravity-tools" do
 
     caveats <<~EOS
       If you encounter the "App is damaged" error, please run the following command:
-        sudo xattr -rd com.apple.quarantine "/Applications/Antigravity Tools.app"
+        sudo xattr -rd com.apple.quarantine "/Applications/Antigravity Tools (Maximizer).app"
 
       Or install with the --no-quarantine flag:
         brew install --cask --no-quarantine antigravity-tools
