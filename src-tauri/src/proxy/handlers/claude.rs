@@ -653,19 +653,21 @@ pub async fn handle_messages(
 
     let config_probe = crate::proxy::mappers::common_utils::resolve_request_config(&request_for_body.model, &initial_route_plan.primary, &tools_val);
 
-    // 3. 根据 request_type 决定是否应用 Claude 家族映射
-    // request_type == "agent" 表示 CLI 请求，应该应用家族映射
+    // 3. 根据 request_type 和用户配置决定是否应用模型自动降级
+    // request_type == "agent" 表示 CLI 请求
+    // 只有当用户启用了 enable_model_auto_downgrade 时才应用自动降级逻辑
     // 其他类型（web_search, image_gen）不应用家族映射
     let is_cli_request = config_probe.request_type == "agent";
+    let auto_downgrade_enabled = state.experimental.read().await.enable_model_auto_downgrade;
 
-    let route_plan = if is_cli_request {
+    let route_plan = if is_cli_request && auto_downgrade_enabled {
         crate::proxy::common::model_mapping::resolve_model_route_plan(
             &request_for_body.model,
             &*state.custom_mapping.read().await,
             &*state.openai_mapping.read().await,
             &*state.anthropic_mapping.read().await,
             &*state.model_strategies.read().await,
-            true,  // CLI 请求应用家族映射
+            true,  // 启用模型自动降级（用户已配置）
         )
     } else {
         initial_route_plan

@@ -20,6 +20,7 @@ export interface ProxyConfig {
     zai?: ZaiConfig;
     scheduling?: StickySessionConfig;
     experimental?: ExperimentalConfig;
+    route_groups?: RouteGroupsConfig;
 }
 
 export type ModelPriority = 'accuracy_first' | 'capacity_first';
@@ -85,6 +86,15 @@ export interface PinnedQuotaModelsConfig {
 
 export interface ExperimentalConfig {
     enable_usage_scaling: boolean;
+    enable_model_auto_downgrade: boolean;
+}
+
+export interface RouteGroupsConfig {
+    claude_45_enabled: boolean;
+    claude_35_enabled: boolean;
+    gpt_4_enabled: boolean;
+    gpt_4o_enabled: boolean;
+    gpt_5_enabled: boolean;
 }
 
 export interface AppConfig {

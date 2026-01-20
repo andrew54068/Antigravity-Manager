@@ -175,11 +175,11 @@ pub struct ExperimentalConfig {
     /// 启用双层签名缓存 (Signature Cache)
     #[serde(default = "default_true")]
     pub enable_signature_cache: bool,
-    
+
     /// 启用工具循环自动恢复 (Tool Loop Recovery)
     #[serde(default = "default_true")]
     pub enable_tool_loop_recovery: bool,
-    
+
     /// 启用跨模型兼容性检查 (Cross-Model Checks)
     #[serde(default = "default_true")]
     pub enable_cross_model_checks: bool,
@@ -188,6 +188,12 @@ pub struct ExperimentalConfig {
     /// 用于解决客户端因 Gemini 上下文过大而错误触发压缩的问题
     #[serde(default = "default_true")]
     pub enable_usage_scaling: bool,
+
+    /// 启用模型智能降级 (Model Auto-Downgrade)
+    /// - true: CLI 请求会应用智能模型路由，某些模型会自动降级到更经济的选项
+    /// - false: 禁用自动降级，严格遵循用户的模型映射配置或直通原始请求
+    #[serde(default = "default_false")]
+    pub enable_model_auto_downgrade: bool,
 }
 
 impl Default for ExperimentalConfig {
@@ -197,11 +203,14 @@ impl Default for ExperimentalConfig {
             enable_tool_loop_recovery: true,
             enable_cross_model_checks: true,
             enable_usage_scaling: true,
+            enable_model_auto_downgrade: false,
         }
     }
 }
 
 fn default_true() -> bool { true }
+
+fn default_false() -> bool { false }
 
 /// 反代服务配置
 #[derive(Debug, Clone, Serialize, Deserialize)]

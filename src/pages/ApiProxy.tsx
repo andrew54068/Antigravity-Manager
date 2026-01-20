@@ -25,7 +25,7 @@ import {
     PencilLine,
     Activity
 } from 'lucide-react';
-import { AppConfig, ProxyConfig, StickySessionConfig, ExperimentalConfig, ModelPriority, ModelStickiness, ModelStrategy } from '../types/config';
+import { AppConfig, ProxyConfig, StickySessionConfig, ExperimentalConfig, ModelPriority, ModelStickiness, ModelStrategy, RouteGroupsConfig } from '../types/config';
 import HelpTooltip from '../components/common/HelpTooltip';
 import ModalDialog from '../components/common/ModalDialog';
 import { showToast } from '../components/common/ToastContainer';
@@ -555,6 +555,32 @@ export default function ApiProxy() {
                 experimental: {
                     ...(appConfig.proxy.experimental || { enable_usage_scaling: true }),
                     ...updates
+                }
+            }
+        };
+        saveConfig(newConfig);
+    };
+
+    const getRouteGroupsConfig = (): RouteGroupsConfig => {
+        return appConfig?.proxy.route_groups || {
+            claude_45_enabled: true,
+            claude_35_enabled: true,
+            gpt_4_enabled: true,
+            gpt_4o_enabled: true,
+            gpt_5_enabled: true,
+        };
+    };
+
+    const updateRouteGroupEnabled = (groupKey: keyof RouteGroupsConfig, enabled: boolean) => {
+        if (!appConfig) return;
+        const currentGroups = getRouteGroupsConfig();
+        const newConfig = {
+            ...appConfig,
+            proxy: {
+                ...appConfig.proxy,
+                route_groups: {
+                    ...currentGroups,
+                    [groupKey]: enabled
                 }
             }
         };
@@ -1581,6 +1607,30 @@ print(response.text)`;
                                             <div className="w-11 h-6 bg-gray-200 dark:bg-base-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500 shadow-inner"></div>
                                         </label>
                                     </div>
+
+                                    {/* Model Auto-Downgrade Toggle */}
+                                    <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-base-200 last:border-0">
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-bold text-gray-900 dark:text-base-content">
+                                                    {t('proxy.config.experimental.enable_model_auto_downgrade')}
+                                                </span>
+                                                <HelpTooltip text={t('proxy.config.experimental.enable_model_auto_downgrade_tooltip')} />
+                                            </div>
+                                            <p className="text-[10px] text-gray-500 dark:text-gray-400 max-w-lg">
+                                                {t('proxy.config.experimental.enable_model_auto_downgrade_tooltip')}
+                                            </p>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                className="sr-only peer"
+                                                checked={!!appConfig.proxy.experimental?.enable_model_auto_downgrade}
+                                                onChange={(e) => updateExperimentalConfig({ enable_model_auto_downgrade: e.target.checked })}
+                                            />
+                                            <div className="w-11 h-6 bg-gray-200 dark:bg-base-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500 shadow-inner"></div>
+                                        </label>
+                                    </div>
                                 </div>
                             </CollapsibleCard>
                         </div>
@@ -1837,15 +1887,30 @@ print(response.text)`;
                                     </h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
                                         {/* Claude 4.5 系列 */}
-                                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/10 dark:to-indigo-900/10 p-3 rounded-xl border border-blue-100 dark:border-blue-800/30 relative group hover:border-blue-400 transition-all duration-300">
-                                            <div className="flex items-center gap-3 mb-3">
-                                                <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
-                                                    <BrainCircuit size={16} />
+                                        <div className={cn(
+                                            "bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/10 dark:to-indigo-900/10 p-3 rounded-xl border border-blue-100 dark:border-blue-800/30 relative group hover:border-blue-400 transition-all duration-300",
+                                            !getRouteGroupsConfig().claude_45_enabled && "opacity-50"
+                                        )}>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={cn(
+                                                        "w-8 h-8 rounded-lg flex items-center justify-center text-white shadow-lg",
+                                                        getRouteGroupsConfig().claude_45_enabled ? "bg-blue-600 shadow-blue-500/30" : "bg-gray-400 shadow-gray-400/30"
+                                                    )}>
+                                                        <BrainCircuit size={16} />
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-xs font-bold text-gray-900 dark:text-base-content">{t('proxy.router.groups.claude_45.name')}</div>
+                                                        <div className="text-[10px] text-gray-500 line-clamp-1">{t('proxy.router.groups.claude_45.desc')}</div>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <div className="text-xs font-bold text-gray-900 dark:text-base-content">{t('proxy.router.groups.claude_45.name')}</div>
-                                                    <div className="text-[10px] text-gray-500 line-clamp-1">{t('proxy.router.groups.claude_45.desc')}</div>
-                                                </div>
+                                                <input
+                                                    type="checkbox"
+                                                    className="toggle toggle-xs bg-gray-200 dark:bg-gray-700 border-gray-300 dark:border-gray-600 checked:bg-blue-500 checked:border-blue-500"
+                                                    checked={getRouteGroupsConfig().claude_45_enabled}
+                                                    onChange={(e) => updateRouteGroupEnabled('claude_45_enabled', e.target.checked)}
+                                                    title={t('proxy.router.toggle_group')}
+                                                />
                                             </div>
                                             <GroupedSelect
                                                 value={appConfig.proxy.anthropic_mapping?.["claude-4.5-series"] || "gemini-3-pro-high"}
@@ -1854,19 +1919,35 @@ print(response.text)`;
                                                     modelSelectOptions,
                                                     appConfig.proxy.anthropic_mapping?.["claude-4.5-series"] || "gemini-3-pro-high"
                                                 )}
+                                                disabled={!getRouteGroupsConfig().claude_45_enabled}
                                             />
                                         </div>
 
                                         {/* Claude 3.5 系列 */}
-                                        <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/10 dark:to-pink-900/10 p-3 rounded-xl border border-purple-100 dark:border-purple-800/30 relative group hover:border-purple-400 transition-all duration-300">
-                                            <div className="flex items-center gap-3 mb-3">
-                                                <div className="w-8 h-8 rounded-lg bg-purple-600 flex items-center justify-center text-white shadow-lg shadow-purple-500/30">
-                                                    <Puzzle size={16} />
+                                        <div className={cn(
+                                            "bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/10 dark:to-pink-900/10 p-3 rounded-xl border border-purple-100 dark:border-purple-800/30 relative group hover:border-purple-400 transition-all duration-300",
+                                            !getRouteGroupsConfig().claude_35_enabled && "opacity-50"
+                                        )}>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={cn(
+                                                        "w-8 h-8 rounded-lg flex items-center justify-center text-white shadow-lg",
+                                                        getRouteGroupsConfig().claude_35_enabled ? "bg-purple-600 shadow-purple-500/30" : "bg-gray-400 shadow-gray-400/30"
+                                                    )}>
+                                                        <Puzzle size={16} />
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-xs font-bold text-gray-900 dark:text-base-content">{t('proxy.router.groups.claude_35.name')}</div>
+                                                        <div className="text-[10px] text-gray-500 line-clamp-1">{t('proxy.router.groups.claude_35.desc')}</div>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <div className="text-xs font-bold text-gray-900 dark:text-base-content">{t('proxy.router.groups.claude_35.name')}</div>
-                                                    <div className="text-[10px] text-gray-500 line-clamp-1">{t('proxy.router.groups.claude_35.desc')}</div>
-                                                </div>
+                                                <input
+                                                    type="checkbox"
+                                                    className="toggle toggle-xs bg-gray-200 dark:bg-gray-700 border-gray-300 dark:border-gray-600 checked:bg-purple-500 checked:border-purple-500"
+                                                    checked={getRouteGroupsConfig().claude_35_enabled}
+                                                    onChange={(e) => updateRouteGroupEnabled('claude_35_enabled', e.target.checked)}
+                                                    title={t('proxy.router.toggle_group')}
+                                                />
                                             </div>
                                             <GroupedSelect
                                                 value={appConfig.proxy.anthropic_mapping?.["claude-3.5-series"] || "claude-sonnet-4-5-thinking"}
@@ -1875,19 +1956,35 @@ print(response.text)`;
                                                     modelSelectOptions,
                                                     appConfig.proxy.anthropic_mapping?.["claude-3.5-series"] || "claude-sonnet-4-5-thinking"
                                                 )}
+                                                disabled={!getRouteGroupsConfig().claude_35_enabled}
                                             />
                                         </div>
 
                                         {/* GPT-4 系列 */}
-                                        <div className="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/10 dark:to-blue-900/10 p-3 rounded-xl border border-indigo-100 dark:border-indigo-800/30 relative group hover:border-indigo-400 transition-all duration-300">
-                                            <div className="flex items-center gap-3 mb-3">
-                                                <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30">
-                                                    <Zap size={16} />
+                                        <div className={cn(
+                                            "bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/10 dark:to-blue-900/10 p-3 rounded-xl border border-indigo-100 dark:border-indigo-800/30 relative group hover:border-indigo-400 transition-all duration-300",
+                                            !getRouteGroupsConfig().gpt_4_enabled && "opacity-50"
+                                        )}>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={cn(
+                                                        "w-8 h-8 rounded-lg flex items-center justify-center text-white shadow-lg",
+                                                        getRouteGroupsConfig().gpt_4_enabled ? "bg-indigo-600 shadow-indigo-500/30" : "bg-gray-400 shadow-gray-400/30"
+                                                    )}>
+                                                        <Zap size={16} />
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-xs font-bold text-gray-900 dark:text-base-content">{t('proxy.router.groups.gpt_4.name')}</div>
+                                                        <div className="text-[10px] text-gray-500 line-clamp-1">{t('proxy.router.groups.gpt_4.desc')}</div>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <div className="text-xs font-bold text-gray-900 dark:text-base-content">{t('proxy.router.groups.gpt_4.name')}</div>
-                                                    <div className="text-[10px] text-gray-500 line-clamp-1">{t('proxy.router.groups.gpt_4.desc')}</div>
-                                                </div>
+                                                <input
+                                                    type="checkbox"
+                                                    className="toggle toggle-xs bg-gray-200 dark:bg-gray-700 border-gray-300 dark:border-gray-600 checked:bg-indigo-500 checked:border-indigo-500"
+                                                    checked={getRouteGroupsConfig().gpt_4_enabled}
+                                                    onChange={(e) => updateRouteGroupEnabled('gpt_4_enabled', e.target.checked)}
+                                                    title={t('proxy.router.toggle_group')}
+                                                />
                                             </div>
                                             <GroupedSelect
                                                 value={appConfig.proxy.openai_mapping?.["gpt-4-series"] || "gemini-3-pro-high"}
@@ -1896,20 +1993,36 @@ print(response.text)`;
                                                     modelSelectOptions,
                                                     appConfig.proxy.openai_mapping?.["gpt-4-series"] || "gemini-3-pro-high"
                                                 )}
+                                                disabled={!getRouteGroupsConfig().gpt_4_enabled}
                                             />
                                             <p className="mt-1 text-[9px] text-indigo-500">{t('proxy.router.gemini3_only_warning')}</p>
                                         </div>
 
                                         {/* GPT-4o / 3.5 系列 */}
-                                        <div className="bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-900/10 dark:to-green-900/10 p-3 rounded-xl border border-emerald-100 dark:border-emerald-800/30 relative group hover:border-emerald-400 transition-all duration-300">
-                                            <div className="flex items-center gap-3 mb-3">
-                                                <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white shadow-lg shadow-emerald-500/30">
-                                                    <Wind size={16} />
+                                        <div className={cn(
+                                            "bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-900/10 dark:to-green-900/10 p-3 rounded-xl border border-emerald-100 dark:border-emerald-800/30 relative group hover:border-emerald-400 transition-all duration-300",
+                                            !getRouteGroupsConfig().gpt_4o_enabled && "opacity-50"
+                                        )}>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={cn(
+                                                        "w-8 h-8 rounded-lg flex items-center justify-center text-white shadow-lg",
+                                                        getRouteGroupsConfig().gpt_4o_enabled ? "bg-emerald-600 shadow-emerald-500/30" : "bg-gray-400 shadow-gray-400/30"
+                                                    )}>
+                                                        <Wind size={16} />
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-xs font-bold text-gray-900 dark:text-base-content">{t('proxy.router.groups.gpt_4o.name')}</div>
+                                                        <div className="text-[10px] text-gray-500 line-clamp-1">{t('proxy.router.groups.gpt_4o.desc')}</div>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <div className="text-xs font-bold text-gray-900 dark:text-base-content">{t('proxy.router.groups.gpt_4o.name')}</div>
-                                                    <div className="text-[10px] text-gray-500 line-clamp-1">{t('proxy.router.groups.gpt_4o.desc')}</div>
-                                                </div>
+                                                <input
+                                                    type="checkbox"
+                                                    className="toggle toggle-xs bg-gray-200 dark:bg-gray-700 border-gray-300 dark:border-gray-600 checked:bg-emerald-500 checked:border-emerald-500"
+                                                    checked={getRouteGroupsConfig().gpt_4o_enabled}
+                                                    onChange={(e) => updateRouteGroupEnabled('gpt_4o_enabled', e.target.checked)}
+                                                    title={t('proxy.router.toggle_group')}
+                                                />
                                             </div>
                                             <GroupedSelect
                                                 value={appConfig.proxy.openai_mapping?.["gpt-4o-series"] || "gemini-3-flash"}
@@ -1918,20 +2031,36 @@ print(response.text)`;
                                                     modelSelectOptions,
                                                     appConfig.proxy.openai_mapping?.["gpt-4o-series"] || "gemini-3-flash"
                                                 )}
+                                                disabled={!getRouteGroupsConfig().gpt_4o_enabled}
                                             />
                                             <p className="mt-1 text-[9px] text-emerald-600">{t('proxy.router.gemini3_only_warning')}</p>
                                         </div>
 
                                         {/* GPT-5 系列 */}
-                                        <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/10 dark:to-orange-900/10 p-3 rounded-xl border border-amber-100 dark:border-amber-800/30 relative group hover:border-amber-400 transition-all duration-300">
-                                            <div className="flex items-center gap-3 mb-3">
-                                                <div className="w-8 h-8 rounded-lg bg-amber-600 flex items-center justify-center text-white shadow-lg shadow-amber-500/30">
-                                                    <Zap size={16} />
+                                        <div className={cn(
+                                            "bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/10 dark:to-orange-900/10 p-3 rounded-xl border border-amber-100 dark:border-amber-800/30 relative group hover:border-amber-400 transition-all duration-300",
+                                            !getRouteGroupsConfig().gpt_5_enabled && "opacity-50"
+                                        )}>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={cn(
+                                                        "w-8 h-8 rounded-lg flex items-center justify-center text-white shadow-lg",
+                                                        getRouteGroupsConfig().gpt_5_enabled ? "bg-amber-600 shadow-amber-500/30" : "bg-gray-400 shadow-gray-400/30"
+                                                    )}>
+                                                        <Zap size={16} />
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-xs font-bold text-gray-900 dark:text-base-content">{t('proxy.router.groups.gpt_5.name')}</div>
+                                                        <div className="text-[10px] text-gray-500 line-clamp-1">{t('proxy.router.groups.gpt_5.desc')}</div>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <div className="text-xs font-bold text-gray-900 dark:text-base-content">{t('proxy.router.groups.gpt_5.name')}</div>
-                                                    <div className="text-[10px] text-gray-500 line-clamp-1">{t('proxy.router.groups.gpt_5.desc')}</div>
-                                                </div>
+                                                <input
+                                                    type="checkbox"
+                                                    className="toggle toggle-xs bg-gray-200 dark:bg-gray-700 border-gray-300 dark:border-gray-600 checked:bg-amber-500 checked:border-amber-500"
+                                                    checked={getRouteGroupsConfig().gpt_5_enabled}
+                                                    onChange={(e) => updateRouteGroupEnabled('gpt_5_enabled', e.target.checked)}
+                                                    title={t('proxy.router.toggle_group')}
+                                                />
                                             </div>
                                             <GroupedSelect
                                                 value={appConfig.proxy.openai_mapping?.["gpt-5-series"] || "gemini-3-flash"}
@@ -1940,6 +2069,7 @@ print(response.text)`;
                                                     modelSelectOptions,
                                                     appConfig.proxy.openai_mapping?.["gpt-5-series"] || "gemini-3-flash"
                                                 )}
+                                                disabled={!getRouteGroupsConfig().gpt_5_enabled}
                                             />
                                             <p className="mt-1 text-[9px] text-amber-600">{t('proxy.router.gemini3_only_warning')}</p>
                                         </div>

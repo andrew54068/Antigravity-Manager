@@ -551,7 +551,9 @@
                 "title": "Experimental Settings",
                 "title_tooltip": "Exploratory features that may be adjusted or removed in future versions.",
                 "enable_usage_scaling": "Enable Usage Scaling",
-                "enable_usage_scaling_tooltip": "For Claude protocol. Enables aggressive scaling when total input exceeds 30k tokens to prevent frequent client-side compression. Note: Reported usage will not reflect actual billing after enabling."
+                "enable_usage_scaling_tooltip": "For Claude protocol. Enables aggressive scaling when total input exceeds 30k tokens to prevent frequent client-side compression. Note: Reported usage will not reflect actual billing after enabling.",
+                "enable_model_auto_downgrade": "Model Auto-Downgrade",
+                "enable_model_auto_downgrade_tooltip": "When enabled, CLI requests will automatically route certain models to more cost-effective alternatives (e.g., Haiku → gemini-2.5-flash-lite). Disable to strictly follow your custom model mappings."
             }
         },
         "example": {
