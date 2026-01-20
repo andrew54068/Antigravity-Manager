@@ -7,9 +7,8 @@
 // Solution: Per-model semaphores that serialize requests to capacity-constrained models.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
-use parking_lot::RwLock;
 
 /// Model queue configuration
 #[derive(Debug, Clone)]
@@ -118,15 +117,15 @@ impl ModelQueue {
     pub async fn acquire(&self, model: &str) -> ModelQueuePermit {
         let model_key = self.normalize_model_key(model);
 
-        let semaphore = {
+        let semaphore: Arc<Semaphore> = {
             // Fast path: check if semaphore exists
-            let read = self.semaphores.read();
+            let read = self.semaphores.read().unwrap();
             if let Some(sem) = read.get(&model_key) {
                 sem.clone()
             } else {
                 drop(read);
                 // Slow path: create new semaphore
-                let mut write = self.semaphores.write();
+                let mut write = self.semaphores.write().unwrap();
                 // Double-check after acquiring write lock
                 if let Some(sem) = write.get(&model_key) {
                     sem.clone()
@@ -145,6 +144,7 @@ impl ModelQueue {
         };
 
         let permit = semaphore
+            .clone()
             .acquire_owned()
             .await
             .expect("Semaphore closed unexpectedly");
@@ -164,15 +164,15 @@ impl ModelQueue {
     /// Try to acquire a permit without blocking.
     /// Returns None if the model's concurrency limit is reached.
     #[allow(dead_code)]
-    pub fn try_acquire(&self, model: &str) -> Option<ModelQueuePermit> {
+    pub async fn try_acquire(&self, model: &str) -> Option<ModelQueuePermit> {
         let model_key = self.normalize_model_key(model);
 
-        let semaphore = {
-            let read = self.semaphores.read();
+        let semaphore: Arc<Semaphore> = {
+            let read = self.semaphores.read().unwrap();
             read.get(&model_key)?.clone()
         };
 
-        let permit = semaphore.try_acquire_owned().ok()?;
+        let permit = semaphore.clone().try_acquire_owned().ok()?;
 
         Some(ModelQueuePermit {
             _permit: permit,
@@ -181,10 +181,11 @@ impl ModelQueue {
     }
 
     /// Get current queue status for monitoring
+    #[allow(dead_code)]
     pub fn get_status(&self) -> HashMap<String, QueueStatus> {
-        let read = self.semaphores.read();
+        let read = self.semaphores.read().unwrap();
         read.iter()
-            .map(|(key, sem)| {
+            .map(|(key, sem): (&String, &Arc<Semaphore>)| {
                 let concurrency = self.get_concurrency(key);
                 let available = sem.available_permits();
                 (
@@ -250,13 +251,13 @@ mod tests {
         let permit1 = queue.acquire("claude-opus-4-5-thinking").await;
 
         // Try to acquire another - should not be available immediately
-        assert!(queue.try_acquire("claude-opus-4-5-thinking").is_none());
+        assert!(queue.try_acquire("claude-opus-4-5-thinking").await.is_none());
 
         // Drop the first permit
         drop(permit1);
 
         // Now we should be able to acquire
-        assert!(queue.try_acquire("claude-opus-4-5-thinking").is_some());
+        assert!(queue.try_acquire("claude-opus-4-5-thinking").await.is_some());
     }
 
     #[tokio::test]
@@ -267,6 +268,6 @@ mod tests {
         let _opus_permit = queue.acquire("claude-opus-4-5-thinking").await;
 
         // Sonnet should still be available (different queue)
-        assert!(queue.try_acquire("claude-sonnet-4-5").is_some());
+        assert!(queue.try_acquire("claude-sonnet-4-5").await.is_some());
     }
 }
