@@ -208,7 +208,7 @@ fn get_all_known_models() -> Vec<String> {
 /// - 如果 pattern 包含通配符，返回所有匹配的模型名称列表
 ///
 /// # 示例
-/// ```
+/// ```text
 /// expand_wildcard_candidate("claude-sonnet-4*")
 /// // => ["claude-sonnet-4-5", "claude-sonnet-4-5-thinking"]
 ///
