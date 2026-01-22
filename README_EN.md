@@ -229,6 +229,21 @@ print(response.choices[0].message.content)
             -   **Ref Flattening**: Always run `flatten_refs()` to catch and handle orphan `$ref` fields.
             -   **Fallback Method**: Added fallback for unresolved `$ref`, converting them to string type with descriptive hints.
             -   **Robustness**: Added new test cases for nested defs and unresolved refs to ensure schema processing stability.
+        -   **[Core Fix] Account Index Protection (Fix Issue #929)**:
+            -   **Security Hardening**: Removed automatic deletion logic on load failure, preventing accidental loss of account indexes during environment anomalies or upgrades.
+        -   **[Feature] Deep Optimization of Router & Model Mapping (PR #954)**:
+            -   **Deterministic Router Priority**: Resolved non-deterministic matching issues for multi-wildcard patterns by implementing a priority system based on pattern specificity.
+            -   **Claude/OpenAI Mapper Enhancements**: Refactored the Streaming Processor and Collector to address Thinking signature loss during context compression.
+            -   **Context Estimation Calibration**: Optimized the `EstimationCalibrator` algorithm for improved token estimation accuracy in long-context scenarios.
+            -   **JSON Schema Purifier Upgrade**: Enhanced deep cleaning for complex JSON Schemas to ensure 100% compatibility with upstream APIs.
+            -   **i18n Synchronization**: Updated localization resources across 8 languages (ZH, EN, JA, PT, RU, TR, VI, ZH-TW).
+
+        -   **[Stability] OAuth Callback & Parsing Enhancement (Fix #931, #850, #778)**:
+            -   **Robust Parsing**: Optimized the local callback server's URL parsing logic to improve compatibility across different browsers.
+            -   **Detailed Logging**: Added raw request logging for authorization failures, enabling quicker debugging of network-level interceptions.
+        -   **[Optimization] OAuth Communication Quality (Issue #948, #887)**:
+            -   **Timeout Extension**: Increased auth request timeouts to 60 seconds to significantly improve token exchange success rates in proxy environments.
+            -   **Error Guidance**: Provided clear guidance for Google API connectivity issues, helping users troubleshoot proxy settings.
     *   **v3.3.48 (2026-01-21)**:
         -   **[Core Fix] Windows Console Flashing Fix (Fix PR #933)**:
             -   **Problem**: On Windows, launching the application or executing background CLI commands would sometimes cause a command prompt window to briefly flash, disrupting the user experience.
