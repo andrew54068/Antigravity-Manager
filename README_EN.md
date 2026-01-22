@@ -224,6 +224,11 @@ print(response.choices[0].message.content)
             -   **Account Filtering**: Added the ability to filter traffic logs by account, allowing for precise tracking of specific account usage in high-volume environments.
             -   **Deep Detail Enhancement**: The monitor details page now displays critical metadata including request protocol (OpenAI/Anthropic/Gemini), account used, and mapped physical models.
             -   **UI & i18n**: Optimized the layout of monitor details and completed translations for all 8 supported languages.
+        -   **[JSON Schema Optimization] Recursive $defs Collection & Improved Fallback (PR #953)**:
+            -   **Recursive Collection**: Added `collect_all_defs()` to gathered `$defs`/`definitions` from all schema levels, fixing missing nested definitions.
+            -   **Ref Flattening**: Always run `flatten_refs()` to catch and handle orphan `$ref` fields.
+            -   **Fallback Method**: Added fallback for unresolved `$ref`, converting them to string type with descriptive hints.
+            -   **Robustness**: Added new test cases for nested defs and unresolved refs to ensure schema processing stability.
     *   **v3.3.48 (2026-01-21)**:
         -   **[Core Fix] Windows Console Flashing Fix (Fix PR #933)**:
             -   **Problem**: On Windows, launching the application or executing background CLI commands would sometimes cause a command prompt window to briefly flash, disrupting the user experience.
