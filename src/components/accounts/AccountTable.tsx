@@ -39,6 +39,7 @@ import {
     ToggleLeft,
     ToggleRight,
     Sparkles,
+    Bot,
 } from 'lucide-react';
 import { Account } from '../../types/account';
 import { useTranslation } from 'react-i18next';
@@ -65,6 +66,7 @@ interface AccountTableProps {
     onExport: (accountId: string) => void;
     onDelete: (accountId: string) => void;
     onToggleProxy: (accountId: string) => void;
+    onToggleClaude: (accountId: string) => void;
     onWarmup?: (accountId: string) => void;
     /** 拖拽排序回调，当用户完成拖拽时触发 */
     onReorder?: (accountIds: string[]) => void;
@@ -85,6 +87,7 @@ interface SortableRowProps {
     onExport: () => void;
     onDelete: () => void;
     onToggleProxy: () => void;
+    onToggleClaude: () => void;
     onWarmup?: () => void;
 }
 
@@ -100,6 +103,7 @@ interface AccountRowContentProps {
     onExport: () => void;
     onDelete: () => void;
     onToggleProxy: () => void;
+    onToggleClaude: () => void;
     onWarmup?: () => void;
 }
 
@@ -208,6 +212,7 @@ function SortableAccountRow({
     onExport,
     onDelete,
     onToggleProxy,
+    onToggleClaude,
     onWarmup,
 }: SortableRowProps) {
     const { t } = useTranslation();
@@ -271,6 +276,7 @@ function SortableAccountRow({
                 onExport={onExport}
                 onDelete={onDelete}
                 onToggleProxy={onToggleProxy}
+                onToggleClaude={onToggleClaude}
                 onWarmup={onWarmup}
             />
         </tr>
@@ -293,6 +299,7 @@ function AccountRowContent({
     onExport,
     onDelete,
     onToggleProxy,
+    onToggleClaude,
     onWarmup,
 }: AccountRowContentProps) {
     const { t } = useTranslation();
@@ -513,6 +520,18 @@ function AccountRowContent({
                     <button
                         className={cn(
                             "p-1.5 rounded-lg transition-all",
+                            account.claude_disabled
+                                ? "text-gray-500 dark:text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/30"
+                                : "text-gray-500 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30"
+                        )}
+                        onClick={(e) => { e.stopPropagation(); onToggleClaude(); }}
+                        title={account.claude_disabled ? t('accounts.enable_claude', 'Enable Claude') : t('accounts.disable_claude', 'Disable Claude')}
+                    >
+                        <Bot className={cn("w-3.5 h-3.5", !account.claude_disabled && "text-purple-500")} />
+                    </button>
+                    <button
+                        className={cn(
+                            "p-1.5 rounded-lg transition-all",
                             account.proxy_disabled
                                 ? "text-gray-500 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30"
                                 : "text-gray-500 dark:text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/30"
@@ -562,6 +581,7 @@ function AccountTable({
     onExport,
     onDelete,
     onToggleProxy,
+    onToggleClaude,
     onReorder,
 }: AccountTableProps) {
     const { t } = useTranslation();
@@ -654,6 +674,7 @@ function AccountTable({
                                     onExport={() => onExport(account.id)}
                                     onDelete={() => onDelete(account.id)}
                                     onToggleProxy={() => onToggleProxy(account.id)}
+                                    onToggleClaude={() => onToggleClaude(account.id)}
                                 />
                             ))}
                         </tbody>
@@ -692,6 +713,7 @@ function AccountTable({
                                     onExport={() => { }}
                                     onDelete={() => { }}
                                     onToggleProxy={() => { }}
+                                    onToggleClaude={() => { }}
                                 />
                             </tr>
                         </tbody>

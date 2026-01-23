@@ -28,6 +28,7 @@ interface AccountState {
     importFromCustomDb: (path: string) => Promise<void>;
     syncAccountFromDb: () => Promise<void>;
     toggleProxyStatus: (accountId: string, enable: boolean, reason?: string) => Promise<void>;
+    toggleAccountClaude: (accountId: string, enable: boolean) => Promise<void>;
     warmUpAccounts: () => Promise<string>;
     warmUpAccount: (accountId: string) => Promise<string>;
 }
@@ -265,6 +266,16 @@ export const useAccountStore = create<AccountState>((set, get) => ({
             await get().fetchAccounts();
         } catch (error) {
             console.error('[AccountStore] Toggle proxy status failed:', error);
+            throw error;
+        }
+    },
+
+    toggleAccountClaude: async (accountId: string, enable: boolean) => {
+        try {
+            await accountService.toggleAccountClaude(accountId, enable);
+            await get().fetchAccounts();
+        } catch (error) {
+            console.error('[AccountStore] Toggle Claude status failed:', error);
             throw error;
         }
     },

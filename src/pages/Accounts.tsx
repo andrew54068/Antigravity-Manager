@@ -37,6 +37,7 @@ function Accounts() {
         loading,
         refreshQuota,
         toggleProxyStatus,
+        toggleAccountClaude,
         reorderAccounts,
         warmUpAccounts,
         warmUpAccount,
@@ -60,6 +61,7 @@ function Accounts() {
     const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
     const [isBatchDelete, setIsBatchDelete] = useState(false);
     const [toggleProxyConfirm, setToggleProxyConfirm] = useState<{ accountId: string; enable: boolean } | null>(null);
+    const [toggleClaudeConfirm, setToggleClaudeConfirm] = useState<{ accountId: string; enable: boolean } | null>(null);
     const [isWarmupConfirmOpen, setIsWarmupConfirmOpen] = useState(false);
     const [isWarmuping, setIsWarmuping] = useState(false);
     const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
@@ -356,6 +358,10 @@ function Accounts() {
         setToggleProxyConfirm({ accountId, enable: currentlyDisabled });
     };
 
+    const handleToggleClaude = (accountId: string, currentlyDisabled: boolean) => {
+        setToggleClaudeConfirm({ accountId, enable: currentlyDisabled });
+    };
+
     const executeToggleProxy = async () => {
         if (!toggleProxyConfirm) return;
 
@@ -371,6 +377,28 @@ function Accounts() {
             showToast(`${t('common.error')}: ${error}`, 'error');
         } finally {
             setToggleProxyConfirm(null);
+        }
+    };
+
+    const executeToggleClaude = async () => {
+        if (!toggleClaudeConfirm) return;
+
+        try {
+            // Note: toggleAccountClaude 'enable' param means "enable Claude", so if currentlyDisabled is true, enable=true.
+            // Wait, handleToggleClaude passed currentlyDisabled as 'enable' for consistency with handleToggleProxy?
+            // In handleToggleProxy: currentlyDisabled is passed as 'enable'.
+            // if proxy_disabled is true, we want to enable it (enable=true).
+            // So logic matches.
+            await toggleAccountClaude(
+                toggleClaudeConfirm.accountId,
+                toggleClaudeConfirm.enable
+            );
+            showToast(t('common.success'), 'success');
+        } catch (error) {
+            console.error('[Accounts] Toggle Claude status failed:', error);
+            showToast(`${t('common.error')}: ${error}`, 'error');
+        } finally {
+            setToggleClaudeConfirm(null);
         }
     };
 
@@ -825,6 +853,7 @@ function Accounts() {
                                 onExport={handleExportOne}
                                 onDelete={handleDelete}
                                 onToggleProxy={(id) => handleToggleProxy(id, !!accounts.find(a => a.id === id)?.proxy_disabled)}
+                                onToggleClaude={(id) => handleToggleClaude(id, !!accounts.find(a => a.id === id)?.claude_disabled)}
                                 onReorder={reorderAccounts}
                                 onWarmup={handleWarmup}
                             />
@@ -846,6 +875,7 @@ function Accounts() {
                             onExport={handleExportOne}
                             onDelete={handleDelete}
                             onToggleProxy={(id) => handleToggleProxy(id, !!accounts.find(a => a.id === id)?.proxy_disabled)}
+                            onToggleClaude={(id) => handleToggleClaude(id, !!accounts.find(a => a.id === id)?.claude_disabled)}
                             onWarmup={handleWarmup}
                         />
                     </div>
@@ -916,6 +946,19 @@ function Accounts() {
                     onConfirm={executeToggleProxy}
                     title={toggleProxyConfirm.enable ? t('accounts.dialog.enable_proxy_title') : t('accounts.dialog.disable_proxy_title')}
                     message={toggleProxyConfirm.enable ? t('accounts.dialog.enable_proxy_msg') : t('accounts.dialog.disable_proxy_msg')}
+                />
+            )}
+
+            {toggleClaudeConfirm && (
+                <ModalDialog
+                    isOpen={!!toggleClaudeConfirm}
+                    onCancel={() => setToggleClaudeConfirm(null)}
+                    onConfirm={executeToggleClaude}
+                    title={toggleClaudeConfirm.enable ? t('accounts.dialog.enable_claude_title', '启用 Claude 配额') : t('accounts.dialog.disable_claude_title', '禁用 Claude 配额')}
+                    message={toggleClaudeConfirm.enable
+                        ? t('accounts.dialog.enable_claude_msg', '确定要启用此账号的 Claude 配额吗？')
+                        : t('accounts.dialog.disable_claude_msg', '确定要禁用此账号的 Claude 配额吗？禁用后该账号将不参与 Claude 模型的轮询。')
+                    }
                 />
             )}
 

@@ -34,6 +34,9 @@ pub struct Account {
     /// Unix timestamp when the proxy was disabled.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_disabled_at: Option<i64>,
+    /// Manually disable Claude models for this account
+    #[serde(default)]
+    pub claude_disabled: bool,
     /// 受配额保护禁用的模型列表 [NEW #621]
     #[serde(default, skip_serializing_if = "HashSet::is_empty")]
     pub protected_models: HashSet<String>,
@@ -58,6 +61,7 @@ impl Account {
             proxy_disabled: false,
             proxy_disabled_reason: None,
             proxy_disabled_at: None,
+            claude_disabled: false,
             protected_models: HashSet::new(),
             created_at: now,
             last_used: now,

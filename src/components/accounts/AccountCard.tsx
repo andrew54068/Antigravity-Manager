@@ -1,4 +1,4 @@
-import { ArrowRightLeft, RefreshCw, Trash2, Download, Info, Lock, Ban, Diamond, Gem, Circle, Clock, ToggleLeft, ToggleRight, Fingerprint, Sparkles } from 'lucide-react';
+import { ArrowRightLeft, RefreshCw, Trash2, Download, Info, Lock, Ban, Diamond, Gem, Circle, Clock, ToggleLeft, ToggleRight, Fingerprint, Sparkles, Bot } from 'lucide-react';
 import { Account } from '../../types/account';
 import { getQuotaColor, formatTimeRemaining, getTimeRemainingColor } from '../../utils/format';
 import { cn } from '../../utils/cn';
@@ -18,11 +18,12 @@ interface AccountCardProps {
     onExport: () => void;
     onDelete: () => void;
     onToggleProxy: () => void;
+    onToggleClaude: () => void;
     onWarmup?: () => void;
 }
 
 
-function AccountCard({ account, selected, onSelect, isCurrent, isRefreshing, isSwitching = false, onSwitch, onRefresh, onViewDetails, onExport, onDelete, onToggleProxy, onViewDevice, onWarmup }: AccountCardProps) {
+function AccountCard({ account, selected, onSelect, isCurrent, isRefreshing, isSwitching = false, onSwitch, onRefresh, onViewDetails, onExport, onDelete, onToggleProxy, onToggleClaude, onViewDevice, onWarmup }: AccountCardProps) {
     const { t } = useTranslation();
     const geminiProModel = account.quota?.models.find(m => m.name === 'gemini-3-pro-high');
     const geminiFlashModel = account.quota?.models.find(m => m.name === 'gemini-3-flash');
@@ -312,6 +313,18 @@ function AccountCard({ account, selected, onSelect, isCurrent, isRefreshing, isS
                         title={t('common.export')}
                     >
                         <Download className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                        className={cn(
+                            "p-1.5 rounded-lg transition-all",
+                            account.claude_disabled
+                                ? "text-gray-400 hover:text-orange-600 hover:bg-orange-50"
+                                : "text-gray-400 hover:text-purple-600 hover:bg-purple-50"
+                        )}
+                        onClick={(e) => { e.stopPropagation(); onToggleClaude(); }}
+                        title={account.claude_disabled ? t('accounts.enable_claude', 'Enable Claude') : t('accounts.disable_claude', 'Disable Claude')}
+                    >
+                        <Bot className={cn("w-3.5 h-3.5", !account.claude_disabled && "text-purple-500")} />
                     </button>
                     <button
                         className={cn(

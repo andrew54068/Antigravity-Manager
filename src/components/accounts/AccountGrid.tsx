@@ -16,11 +16,12 @@ interface AccountGridProps {
     onExport: (accountId: string) => void;
     onDelete: (accountId: string) => void;
     onToggleProxy: (accountId: string) => void;
+    onToggleClaude: (accountId: string) => void;
     onWarmup?: (accountId: string) => void;
 }
 
 
-function AccountGrid({ accounts, selectedIds, refreshingIds, onToggleSelect, currentAccountId, switchingAccountId, onSwitch, onRefresh, onViewDetails, onExport, onDelete, onToggleProxy, onViewDevice, onWarmup }: AccountGridProps) {
+function AccountGrid({ accounts, selectedIds, refreshingIds, onToggleSelect, currentAccountId, switchingAccountId, onSwitch, onRefresh, onViewDetails, onExport, onDelete, onToggleProxy, onToggleClaude, onViewDevice, onWarmup }: AccountGridProps) {
     const { t } = useTranslation();
     if (accounts.length === 0) {
         return (
@@ -49,6 +50,7 @@ function AccountGrid({ accounts, selectedIds, refreshingIds, onToggleSelect, cur
                     onExport={() => onExport(account.id)}
                     onDelete={() => onDelete(account.id)}
                     onToggleProxy={() => onToggleProxy(account.id)}
+                    onToggleClaude={() => onToggleClaude(account.id)}
                     onWarmup={onWarmup ? () => onWarmup(account.id) : undefined}
                 />
             ))}

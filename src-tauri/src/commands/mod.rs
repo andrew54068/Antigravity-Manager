@@ -756,6 +756,56 @@ pub async fn toggle_proxy_status(
     Ok(())
 }
 
+/// 切换账号的 Claude 禁用状态
+#[tauri::command]
+pub async fn toggle_account_claude(
+    app: tauri::AppHandle,
+    proxy_state: tauri::State<'_, crate::commands::proxy::ProxyServiceState>,
+    account_id: String,
+    enable: bool,
+) -> Result<(), String> {
+    modules::logger::log_info(&format!(
+        "切换账号 Claude 状态: {} -> {}",
+        account_id,
+        if enable { "启用" } else { "禁用" }
+    ));
+
+    // 1. 读取账号文件
+    let data_dir = modules::account::get_data_dir()?;
+    let account_path = data_dir.join("accounts").join(format!("{}.json", account_id));
+
+    if !account_path.exists() {
+        return Err(format!("账号文件不存在: {}", account_id));
+    }
+
+    let content = std::fs::read_to_string(&account_path)
+        .map_err(|e| format!("读取账号文件失败: {}", e))?;
+
+    let mut account_json: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| format!("解析账号文件失败: {}", e))?;
+
+    // 2. 更新 claude_disabled 字段 (注意：enable=true 意味着 claude_disabled=false)
+    account_json["claude_disabled"] = serde_json::Value::Bool(!enable);
+
+    // 3. 保存到磁盘
+    std::fs::write(&account_path, serde_json::to_string_pretty(&account_json).unwrap())
+        .map_err(|e| format!("写入账号文件失败: {}", e))?;
+
+    modules::logger::log_info(&format!(
+        "账号 Claude 状态已更新: {} ({})",
+        account_id,
+        if enable { "已启用" } else { "已禁用" }
+    ));
+
+    // 4. 如果反代服务正在运行,重新加载账号池
+    let _ = crate::commands::proxy::reload_proxy_accounts(proxy_state).await;
+
+    // 5. 更新托盘菜单 (如果有必要)
+    crate::modules::tray::update_tray_menus(&app);
+
+    Ok(())
+}
+
 /// 预热所有可用账号
 #[tauri::command]
 pub async fn warm_up_all_accounts() -> Result<String, String> {

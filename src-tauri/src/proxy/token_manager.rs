@@ -20,6 +20,7 @@ pub struct ProxyToken {
     pub project_id: Option<String>,
     pub subscription_tier: Option<String>, // "FREE" | "PRO" | "ULTRA"
     pub remaining_quota: Option<i32>, // [FIX #563] Remaining quota for priority sorting
+    pub claude_disabled: bool,
     pub protected_models: HashSet<String>, // [NEW #621]
 }
 
@@ -223,7 +224,12 @@ impl TokenManager {
         let remaining_quota = account.get("quota")
             .and_then(|q| self.calculate_quota_stats(q));
             // .filter(|&r| r > 0); // 移除 >0 过滤，因为 0% 也是有效数据，只是优先级低
-        
+
+        // 提取 Claude 禁用状态
+        let claude_disabled = account.get("claude_disabled")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
         // 【新增 #621】提取受限模型列表
         let protected_models: HashSet<String> = account.get("protected_models")
             .and_then(|v| v.as_array())
@@ -246,6 +252,7 @@ impl TokenManager {
             project_id,
             subscription_tier,
             remaining_quota,
+            claude_disabled,
             protected_models,
         }))
     }
@@ -718,6 +725,12 @@ impl TokenManager {
                             continue;
                         }
 
+                        // 【新增】Claude 禁用检查
+                        if quota_group == "claude" && candidate.claude_disabled {
+                            tracing::debug!("Account {} has Claude disabled, skipping", candidate.email);
+                            continue;
+                        }
+
                         // 【新增】主动避开限流或 5xx 锁定的账号 (高可用优化)
                         if self.is_rate_limited_by_account_id(&candidate.account_id) { // Changed to account_id
                             continue;
@@ -753,6 +766,12 @@ impl TokenManager {
                     // 【新增 #621】模型级限流检查
                     if quota_protection_enabled && candidate.protected_models.contains(&normalized_target) {
                         tracing::info!("  ⛔ {} - SKIP: quota-protected for {} [{}]", candidate.email, normalized_target, target_model);
+                        continue;
+                    }
+
+                    // 【新增】Claude 禁用检查
+                    if quota_group == "claude" && candidate.claude_disabled {
+                        tracing::info!("  ⛔ {} - SKIP: Claude disabled", candidate.email);
                         continue;
                     }
 
@@ -1194,7 +1213,20 @@ impl TokenManager {
                 );
                 continue;
             }
-            
+
+            // 3. 检查 Claude 是否被禁用 (如果是 Claude 请求)
+            // 注意：has_available_account 目前主要用于判断是否需要 fallback，
+            // 而 fallback 通常是在 Claude 配额耗尽时发生。
+            // 这里我们需要根据 target_model 判断是否是 Claude 模型。
+            let is_claude_model = target_model.to_lowercase().contains("claude");
+            if is_claude_model && token.claude_disabled {
+                 tracing::debug!(
+                    "[Fallback Check] Account {} has Claude disabled, skipping",
+                    token.email
+                );
+                continue;
+            }
+
             // 找到至少一个可用账号
             tracing::debug!(
                 "[Fallback Check] Found available account: {} for model {}",
