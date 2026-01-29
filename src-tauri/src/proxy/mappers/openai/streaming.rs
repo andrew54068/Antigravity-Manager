@@ -847,3 +847,92 @@ pub fn create_codex_sse_stream(
 
     Box::pin(stream)
 }
+
+/// 收集 OpenAI SSE 流并转换为完整的 JSON 响应
+pub async fn collect_openai_stream_to_json<S, E>(
+    mut stream: S,
+) -> Result<super::models::OpenAIResponse, String>
+where
+    S: Stream<Item = Result<Bytes, E>> + Unpin + Send,
+    E: std::fmt::Display,
+{
+    let mut full_content = String::new();
+    let mut model = String::new();
+    let mut id = String::new();
+    let mut created = 0;
+    let mut usage = None;
+    let mut finish_reason = None;
+
+    while let Some(result) = stream.next().await {
+        match result {
+            Ok(bytes) => {
+                let s = String::from_utf8_lossy(&bytes);
+                for line in s.lines() {
+                    let line = line.trim();
+                    if line.starts_with("data: ") {
+                        let data = line.trim_start_matches("data: ").trim();
+                        if data == "[DONE]" {
+                            continue;
+                        }
+
+                        if let Ok(json) = serde_json::from_str::<Value>(data) {
+                            if id.is_empty() {
+                                if let Some(sid) = json.get("id").and_then(|v| v.as_str()) {
+                                    id = sid.to_string();
+                                }
+                                if let Some(m) = json.get("model").and_then(|v| v.as_str()) {
+                                    model = m.to_string();
+                                }
+                                if let Some(c) = json.get("created").and_then(|v| v.as_u64()) {
+                                    created = c as i64;
+                                }
+                            }
+
+                            // Extract content delta
+                            if let Some(choices) = json.get("choices").and_then(|v| v.as_array()) {
+                                if let Some(choice) = choices.first() {
+                                    if let Some(delta) = choice.get("delta") {
+                                        if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
+                                            full_content.push_str(content);
+                                        }
+                                    }
+                                    if let Some(fr) = choice.get("finish_reason").and_then(|v| v.as_str()) {
+                                        finish_reason = Some(fr.to_string());
+                                    }
+                                }
+                            }
+
+                            // Extract usage
+                            if let Some(u) = json.get("usage") {
+                                if let Ok(parsed_usage) = serde_json::from_value(u.clone()) {
+                                    usage = Some(parsed_usage);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => return Err(format!("Stream error: {}", e)),
+        }
+    }
+
+    Ok(super::models::OpenAIResponse {
+        id,
+        object: "chat.completion".to_string(),
+        created: created as u64,
+        model,
+        choices: vec![super::models::Choice {
+            index: 0,
+            message: super::models::OpenAIMessage {
+                role: "assistant".to_string(),
+                content: Some(super::models::OpenAIContent::String(full_content)),
+                tool_calls: None,
+                reasoning_content: None,
+                tool_call_id: None,
+                name: None,
+            },
+            finish_reason: finish_reason.or(Some("stop".to_string())),
+        }],
+        usage: usage.unwrap_or_default(),
+    })
+}

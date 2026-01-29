@@ -4,7 +4,7 @@
 use super::models::*;
 use super::utils::to_claude_usage;
 use crate::proxy::mappers::estimation_calibrator::get_calibrator;
-// use crate::proxy::mappers::signature_store::store_thought_signature; // Deprecated
+use crate::proxy::mappers::signature_store::store_thought_signature; // Deprecated
 use crate::proxy::SignatureCache;
 use bytes::Bytes;
 use serde_json::{json, Value};
@@ -784,6 +784,8 @@ impl<'a> PartProcessor<'a> {
                 "[Claude-SSE] Captured thought_signature from thinking block (length: {})",
                 sig.len()
             );
+            // Keep global store in sync for request preflight fallback.
+            store_thought_signature(sig);
         }
 
         // 暂存签名 (for local block handling)

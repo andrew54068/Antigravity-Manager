@@ -16,7 +16,9 @@ use crate::proxy::mappers::claude::{
     transform_claude_request_in, transform_response, create_claude_sse_stream, ClaudeRequest,
     filter_invalid_thinking_blocks_with_family, close_tool_loop_for_thinking,
     clean_cache_control_from_messages, merge_consecutive_messages,
-    models::{Message, MessageContent},
+    models::{Message, MessageContent, ContentBlock},
+    StreamingState,
+    streaming::BlockType,
 };
 use crate::proxy::server::AppState;
 use crate::proxy::mappers::context_manager::ContextManager;
@@ -24,7 +26,9 @@ use crate::proxy::mappers::estimation_calibrator::get_calibrator;
 use axum::http::HeaderMap;
 use std::sync::{atomic::Ordering, Arc};
 
-const MAX_RETRY_ATTEMPTS: usize = 3;
+// Increase to allow rotation across larger account pools.
+const MAX_RETRY_ATTEMPTS: usize = 20;
+const MIN_SIGNATURE_LENGTH: usize = 10;  // 最小有效签名长度
 
 // ===== Model Constants for Background Tasks =====
 // These can be adjusted for performance/cost optimization or overridden by custom_mapping
@@ -94,6 +98,174 @@ The structure MUST be as follows:
 // Jitter was causing connection instability, reverted to fixed delays
 // const JITTER_FACTOR: f64 = 0.2;
 
+// ===== Thinking 块处理辅助函数 =====
+
+
+/// 检查 thinking 块是否有有效签名
+fn has_valid_signature(block: &ContentBlock) -> bool {
+    match block {
+        ContentBlock::Thinking { signature, thinking, .. } => {
+            // 空 thinking + 任意 signature = 有效 (trailing signature case)
+            if thinking.is_empty() && signature.is_some() {
+                return true;
+            }
+            // 有内容 + 足够长度的 signature = 有效
+            signature.as_ref().map_or(false, |s| s.len() >= MIN_SIGNATURE_LENGTH)
+        }
+        _ => true  // 非 thinking 块默认有效
+    }
+}
+
+/// 清理 thinking 块,只保留必要字段(移除 cache_control 等)
+fn sanitize_thinking_block(block: ContentBlock) -> ContentBlock {
+    match block {
+        ContentBlock::Thinking { thinking, signature, .. } => {
+            // 重建块,移除 cache_control 等额外字段
+            ContentBlock::Thinking {
+                thinking,
+                signature,
+                cache_control: None,
+            }
+        }
+        _ => block
+    }
+}
+
+/// 过滤消息中的无效 thinking 块
+fn filter_invalid_thinking_blocks(messages: &mut Vec<Message>) {
+    let mut total_filtered = 0;
+
+    for (msg_index, msg) in messages.iter_mut().enumerate() {
+        // 只处理 assistant 消息
+        // [CRITICAL FIX] Handle 'model' role too (Google history usage)
+        if msg.role != "assistant" && msg.role != "model" {
+            continue;
+        }
+
+        if let MessageContent::Array(blocks) = &mut msg.content {
+            let original_len = blocks.len();
+            let mut thinking_blocks = 0usize;
+            
+            // 过滤并清理
+            let mut new_blocks = Vec::new();
+            for (block_index, block) in blocks.drain(..).enumerate() {
+                if let ContentBlock::Thinking { ref thinking, ref signature, .. } = block {
+                    thinking_blocks += 1;
+                    let sig_len = signature.as_ref().map(|s| s.len());
+                    let thinking_len = thinking.len();
+                    let is_valid = has_valid_signature(&block);
+                    tracing::debug!(
+                        "[Thinking-Filter] msg={} role={} block={} thinking_len={} sig_len={:?} valid={}",
+                        msg_index,
+                        msg.role,
+                        block_index,
+                        thinking_len,
+                        sig_len,
+                        is_valid
+                    );
+
+                    // [CRITICAL FIX] Vertex AI 不认可 skip_thought_signature_validator
+                    // 必须直接删除无效的 thinking 块
+                    if is_valid {
+                        new_blocks.push(sanitize_thinking_block(block));
+                    } else {
+                        // [IMPROVED] 保留内容转换为 text，而不是直接丢弃
+                        if !thinking.is_empty() {
+                            tracing::info!(
+                                "[Claude-Handler] Invalid thinking signature -> text (msg={}, block={}, thinking_len={}, sig_len={:?})",
+                                msg_index,
+                                block_index,
+                                thinking_len,
+                                sig_len
+                            );
+                            new_blocks.push(ContentBlock::Text { text: thinking.clone() });
+                        } else {
+                            tracing::debug!(
+                                "[Claude-Handler] Dropping empty invalid thinking block (msg={}, block={}, sig_len={:?})",
+                                msg_index,
+                                block_index,
+                                sig_len
+                            );
+                        }
+                    }
+                } else {
+                    new_blocks.push(block);
+                }
+            }
+            
+            *blocks = new_blocks;
+            let filtered_count = original_len - blocks.len();
+            total_filtered += filtered_count;
+
+            if thinking_blocks > 0 {
+                tracing::debug!(
+                    "[Thinking-Filter] msg={} role={} thinking_blocks={} filtered={}",
+                    msg_index,
+                    msg.role,
+                    thinking_blocks,
+                    filtered_count
+                );
+            }
+            
+            // 如果过滤后为空,添加一个空文本块以保持消息有效
+            if blocks.is_empty() {
+                blocks.push(ContentBlock::Text { 
+                    text: String::new() 
+                });
+            }
+        }
+    }
+    
+    if total_filtered > 0 {
+        debug!("Filtered {} invalid thinking block(s) from history", total_filtered);
+    }
+}
+
+/// 移除尾部的无签名 thinking 块
+fn remove_trailing_unsigned_thinking(blocks: &mut Vec<ContentBlock>) {
+    if blocks.is_empty() {
+        return;
+    }
+    
+    // 从后向前扫描
+    let mut end_index = blocks.len();
+    for i in (0..blocks.len()).rev() {
+        match &blocks[i] {
+            ContentBlock::Thinking { .. } => {
+                if !has_valid_signature(&blocks[i]) {
+                    end_index = i;
+                } else {
+                    break;  // 遇到有效签名的 thinking 块,停止
+                }
+            }
+            _ => break  // 遇到非 thinking 块,停止
+        }
+    }
+    
+    if end_index < blocks.len() {
+        let removed = blocks.len() - end_index;
+        blocks.truncate(end_index);
+        debug!("Removed {} trailing unsigned thinking block(s)", removed);
+    }
+}
+
+fn build_warmup_sse(model: &str, text: &str, trace_id: &str) -> Vec<Bytes> {
+    let mut state = StreamingState::new();
+    let raw_json = json!({
+        "modelVersion": model,
+        "responseId": format!("warmup_{}", trace_id),
+    });
+
+    let mut chunks = Vec::new();
+    chunks.push(state.emit_message_start(&raw_json));
+    chunks.extend(state.start_block(
+        BlockType::Text,
+        json!({ "type": "text", "text": "" }),
+    ));
+    chunks.push(state.emit_delta("text_delta", json!({ "text": text })));
+    chunks.extend(state.emit_finish(None, None));
+    chunks
+}
 
 // ===== 统一退避策略模块 =====
 
@@ -492,34 +664,78 @@ pub async fn handle_messages(
     let mut last_error = String::new();
     let retried_without_thinking = false;
     let mut last_email: Option<String> = None;
-    
-    for attempt in 0..max_attempts {
-        // 2. 模型路由解析
-        let mut mapped_model = crate::proxy::common::model_mapping::resolve_model_route(
+
+    // 将 Claude 工具转为 Value 数组以便探测联网
+    let tools_val: Option<Vec<Value>> = request_for_body.tools.as_ref().map(|list| {
+        list.iter().map(|t| serde_json::to_value(t).unwrap_or(json!({}))).collect()
+    });
+
+    // 2. 模型路由与配置解析 (提前解析以确定请求类型)
+    // 先不应用家族映射，获取初步的 mapped_model
+    let initial_route_plan = crate::proxy::common::model_mapping::resolve_model_route_plan(
+        &request_for_body.model,
+        &*state.custom_mapping.read().await,
+        &*state.model_strategies.read().await,
+    );
+
+    let config_probe = crate::proxy::mappers::common_utils::resolve_request_config(
+        &request_for_body.model, 
+        &initial_route_plan.primary, 
+        &tools_val,
+        request.size.as_deref(),      // [NEW] Pass size parameter
+        request.quality.as_deref()    // [NEW] Pass quality parameter
+    );
+
+    // 3. 根据 request_type 决定是否应用 Claude 家族映射
+    // request_type == "agent" 表示 CLI 请求，应该应用家族映射
+    // 其他类型（web_search, image_gen）不应用家族映射
+    let is_cli_request = config_probe.request_type == "agent";
+
+    let route_plan = if is_cli_request {
+        crate::proxy::common::model_mapping::resolve_model_route_plan(
             &request_for_body.model,
             &*state.custom_mapping.read().await,
-        );
-        
-        // 将 Claude 工具转为 Value 数组以便探测联网
-        let tools_val: Option<Vec<Value>> = request_for_body.tools.as_ref().map(|list| {
-            list.iter().map(|t| serde_json::to_value(t).unwrap_or(json!({}))).collect()
-        });
+            &*state.model_strategies.read().await,
+        )
+    } else {
+        initial_route_plan
+    };
 
         let config = crate::proxy::mappers::common_utils::resolve_request_config(
-            &request_for_body.model, 
-            &mapped_model, 
+            &request_for_body.model,
+            &route_plan.primary,
             &tools_val,
             request.size.as_deref(),      // [NEW] Pass size parameter
             request.quality.as_deref()    // [NEW] Pass quality parameter
         );
+    let mut model_candidates = route_plan.candidates();
+    let max_models = route_plan.max_models();
+    if model_candidates.is_empty() {
+        model_candidates.push(request_for_body.model.clone());
+    }
+    model_candidates.truncate(max_models);
 
-        // 0. 尝试提取 session_id 用于粘性调度 (Phase 2/3)
-        // 使用 SessionManager 生成稳定的会话指纹
-        let session_id_str = crate::proxy::session_manager::SessionManager::extract_session_id(&request_for_body);
-        let session_id = Some(session_id_str.as_str());
+    // 0. 尝试提取 session_id 用于粘性调度 (Phase 2/3)
+    // 使用 SessionManager 生成稳定的会话指纹
+    let session_id_str = crate::proxy::session_manager::SessionManager::extract_session_id(&request_for_body);
+    let session_id = Some(session_id_str.as_str());
 
-        let force_rotate_token = attempt > 0;
-        let (access_token, project_id, email) = match token_manager.get_token(&config.request_type, force_rotate_token, session_id, &config.final_model).await {
+    for (model_index, candidate_model) in model_candidates.iter().enumerate() {
+        let is_last_model = model_index + 1 >= model_candidates.len();
+        let mut switched_model = false;
+
+        let config = crate::proxy::mappers::common_utils::resolve_request_config(
+            &request_for_body.model, 
+            candidate_model, 
+            &tools_val, 
+            request.size.as_deref(),      // [NEW] Pass size parameter
+            request.quality.as_deref()    // [NEW] Pass quality parameter
+        );
+        for attempt in 0..max_attempts {
+            let mut mapped_model = candidate_model.clone();
+
+            let force_rotate_token = attempt > 0;
+            let (access_token, project_id, email) = match token_manager.get_token(&config.request_type, force_rotate_token, session_id, &config.final_model).await {
             Ok(t) => t,
             Err(e) => {
                 let safe_message = if e.contains("invalid_grant") {
@@ -1109,6 +1325,11 @@ pub async fn handle_messages(
             }
         }
 
+        if route_plan.is_capacity_first() && should_rotate_account(status_code) && !is_last_model {
+            switched_model = true;
+            break;
+        }
+
         // 5. 统一处理所有可重试错误
         // [REMOVED] 不再特殊处理 QUOTA_EXHAUSTED,允许账号轮换
         // 原逻辑会在第一个账号配额耗尽时直接返回,导致"平衡"模式无法切换账号
@@ -1146,6 +1367,33 @@ pub async fn handle_messages(
             error!("[{}] Non-retryable error {}: {}", trace_id, status_code, error_text);
             return (status, [("X-Account-Email", email.as_str())], error_text).into_response();
         }
+    }
+
+    if switched_model {
+        if route_plan.policy.stickiness == crate::proxy::config::ModelStickiness::Weak {
+            token_manager.clear_session_binding(session_id_str.as_str());
+        }
+        tracing::warn!(
+            "[Router] Strategy fallback (Claude): {} -> {}",
+            candidate_model,
+            model_candidates
+                .get(model_index + 1)
+                .unwrap_or(candidate_model)
+        );
+        continue;
+    }
+    if !is_last_model {
+        if route_plan.policy.stickiness == crate::proxy::config::ModelStickiness::Weak {
+            token_manager.clear_session_binding(session_id_str.as_str());
+        }
+        tracing::warn!(
+            "[Router] Strategy fallback (Claude): {} -> {}",
+            candidate_model,
+            model_candidates
+                .get(model_index + 1)
+                .unwrap_or(candidate_model)
+        );
+    }
     }
     
     if let Some(email) = last_email {

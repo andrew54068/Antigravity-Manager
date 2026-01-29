@@ -1,10 +1,14 @@
-mod models;
-mod modules;
-mod commands;
-mod utils;
-mod proxy;  // Proxy service module
+pub mod models;
+pub mod modules;
+#[cfg(feature = "ui")]
+pub mod commands;
+pub mod utils;
+pub mod proxy;  // 反代服务模块
+pub mod services; // Shared services
 pub mod error;
 
+
+#[cfg(feature = "ui")]
 use tauri::Manager;
 use modules::logger;
 use tracing::{info, warn, error};
@@ -35,12 +39,14 @@ fn increase_nofile_limit() {
     }
 }
 
-// Test command
+// 测试命令
+#[cfg(feature = "ui")]
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+#[cfg(feature = "ui")]
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Increase file descriptor limit (macOS only)
@@ -230,8 +236,6 @@ pub fn run() {
             commands::proxy::get_proxy_scheduling_config,
             commands::proxy::update_proxy_scheduling_config,
             commands::proxy::clear_proxy_session_bindings,
-            commands::proxy::set_preferred_account,
-            commands::proxy::get_preferred_account,
             // Autostart commands
             commands::autostart::toggle_auto_launch,
             commands::autostart::is_auto_launch_enabled,

@@ -17,12 +17,15 @@ import {
     Zap,
     ArrowRight,
     Sparkles,
+    Wind,
     Code,
     Check,
     X,
-    Edit2
+    Edit2,
+    PencilLine,
+    Activity
 } from 'lucide-react';
-import { AppConfig, ProxyConfig, StickySessionConfig, ExperimentalConfig } from '../types/config';
+import { AppConfig, ProxyConfig, StickySessionConfig, ExperimentalConfig, ModelPriority, ModelStickiness, ModelStrategy } from '../types/config';
 import HelpTooltip from '../components/common/HelpTooltip';
 import ModalDialog from '../components/common/ModalDialog';
 import { showToast } from '../components/common/ToastContainer';
@@ -157,6 +160,12 @@ export default function ApiProxy() {
     const [customMappingValue, setCustomMappingValue] = useState(''); // 自定义映射表单的选中值
     const [editingKey, setEditingKey] = useState<string | null>(null);
     const [editingValue, setEditingValue] = useState<string>('');
+    const [strategyDraftId, setStrategyDraftId] = useState('');
+    const [strategyDraftCandidates, setStrategyDraftCandidates] = useState('');
+    const [strategyDraftPriority, setStrategyDraftPriority] = useState<ModelPriority>('accuracy_first');
+    const [strategyDraftStickiness, setStrategyDraftStickiness] = useState<ModelStickiness>('strong');
+    const [strategyDraftMaxHops, setStrategyDraftMaxHops] = useState('');
+    const [editingStrategyId, setEditingStrategyId] = useState<string | null>(null);
 
     // API Key editing states
     const [isEditingApiKey, setIsEditingApiKey] = useState(false);
@@ -189,16 +198,50 @@ export default function ApiProxy() {
     const zaiModelMapping = useMemo(() => {
         return appConfig?.proxy.zai?.model_mapping || {};
     }, [appConfig?.proxy.zai?.model_mapping]);
+    const modelStrategies = useMemo(() => {
+        return appConfig?.proxy.model_strategies || {};
+    }, [appConfig?.proxy.model_strategies]);
 
+    const strategyOptions: SelectOption[] = useMemo(() => {
+        const entries = Object.entries(modelStrategies);
+        if (entries.length === 0) {
+            return [];
+        }
+        return entries
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([id, strategy]) => ({
+                value: `strategy:${id}`,
+                label: `strategy:${id} (${strategy.candidates?.length || 0})`,
+                group: t('proxy.router.strategy_group')
+            }));
+    }, [modelStrategies, t]);
 
-    // 生成自定义映射表单的选项 (从 models 动态生成)
-    const customMappingOptions: SelectOption[] = useMemo(() => {
+    const strategyEntries = useMemo(() => {
+        return Object.entries(modelStrategies).sort(([a], [b]) => a.localeCompare(b));
+    }, [modelStrategies]);
+
+    const baseModelSelectOptions: SelectOption[] = useMemo(() => {
         return models.map(model => ({
+            value: model.id,
+            label: model.id,
+            group: model.group || 'Other'
+        }));
+    }, [models]);
+
+    // 生成分组下拉选项 (支持策略)
+    const modelSelectOptions: SelectOption[] = useMemo(() => {
+        return [...strategyOptions, ...baseModelSelectOptions];
+    }, [strategyOptions, baseModelSelectOptions]);
+
+    // 生成自定义映射表单的选项 (从 models 动态生成, 支持策略)
+    const customMappingOptions: SelectOption[] = useMemo(() => {
+        const base = models.map(model => ({
             value: model.id,
             label: `${model.id} (${model.name})`,
             group: model.group || 'Other'
         }));
-    }, [models]);
+        return [...strategyOptions, ...base];
+    }, [models, strategyOptions]);
 
     // 初始化加载
     useEffect(() => {
@@ -380,17 +423,25 @@ export default function ApiProxy() {
     };
 
     // 专门处理模型映射的热更新 (全量)
-    const handleMappingUpdate = async (type: 'custom', key: string, value: string) => {
+    const handleMappingUpdate = async (type: 'anthropic' | 'openai' | 'custom', key: string, value: string) => {
         if (!appConfig) return;
 
         console.log('[DEBUG] handleMappingUpdate called:', { type, key, value });
 
-        const newConfig = { ...appConfig.proxy };
-        newConfig.custom_mapping = { ...(newConfig.custom_mapping || {}), [key]: value };
+        const newProxyConfig = { ...appConfig.proxy };
+        if (type === 'anthropic') {
+            newProxyConfig.anthropic_mapping = { ...(newProxyConfig.anthropic_mapping || {}), [key]: value };
+        } else if (type === 'openai') {
+            newProxyConfig.openai_mapping = { ...(newProxyConfig.openai_mapping || {}), [key]: value };
+        } else {
+            newProxyConfig.custom_mapping = { ...(newProxyConfig.custom_mapping || {}), [key]: value };
+        }
+
+        const newAppConfig = { ...appConfig, proxy: newProxyConfig };
 
         try {
-            await invoke('update_model_mapping', { config: newConfig });
-            setAppConfig({ ...appConfig, proxy: newConfig });
+            await invoke('save_config', { config: newAppConfig });
+            setAppConfig(newAppConfig);
             console.log('[DEBUG] Mapping updated successfully');
             showToast(t('common.saved'), 'success');
         } catch (error) {
@@ -408,9 +459,18 @@ export default function ApiProxy() {
         if (!appConfig) return;
         setIsResetConfirmOpen(false);
 
-        // 恢复到默认映射值 (空映射)
+        // 恢复到默认映射值
         const newConfig = {
             ...appConfig.proxy,
+            anthropic_mapping: {
+                'claude-4.5-series': 'gemini-3-pro-high',
+                'claude-3.5-series': 'claude-sonnet-4-5-thinking'
+            },
+            openai_mapping: {
+                'gpt-4-series': 'gemini-3-pro-high',
+                'gpt-4o-series': 'gemini-3-flash',
+                'gpt-5-series': 'gemini-3-flash'
+            },
             custom_mapping: {}
         };
 
@@ -470,6 +530,92 @@ export default function ApiProxy() {
             setAppConfig({ ...appConfig, proxy: newConfig });
         } catch (error) {
             console.error('Failed to remove custom mapping:', error);
+        }
+    };
+
+    const resetStrategyDraft = () => {
+        setStrategyDraftId('');
+        setStrategyDraftCandidates('');
+        setStrategyDraftPriority('accuracy_first');
+        setStrategyDraftStickiness('strong');
+        setStrategyDraftMaxHops('');
+        setEditingStrategyId(null);
+    };
+
+    const parseStrategyCandidates = (input: string) => {
+        const items = input
+            .split(/[\n,]+/)
+            .map(item => item.trim())
+            .filter(item => item.length > 0);
+        return Array.from(new Set(items));
+    };
+
+    const handleSaveStrategy = async () => {
+        if (!appConfig) return;
+        const strategyId = (editingStrategyId ?? strategyDraftId).trim();
+        if (!strategyId) {
+            showToast(t('proxy.router.strategy_validation_id'), 'error');
+            return;
+        }
+        const candidates = parseStrategyCandidates(strategyDraftCandidates);
+        if (candidates.length === 0) {
+            showToast(t('proxy.router.strategy_validation_candidates'), 'error');
+            return;
+        }
+
+        const maxHopsValue = Number.parseInt(strategyDraftMaxHops, 10);
+        const policy: NonNullable<ModelStrategy['policy']> = {
+            model_priority: strategyDraftPriority,
+            stickiness: strategyDraftStickiness
+        };
+        if (!Number.isNaN(maxHopsValue) && maxHopsValue > 0) {
+            policy.max_model_hops = maxHopsValue;
+        }
+
+        const currentStrategies = appConfig.proxy.model_strategies || {};
+        const newStrategies = { ...currentStrategies, [strategyId]: { candidates, policy } };
+        const newConfig = { ...appConfig.proxy, model_strategies: newStrategies };
+
+        try {
+            await invoke('update_model_mapping', { config: newConfig });
+            setAppConfig({ ...appConfig, proxy: newConfig });
+            setEditingStrategyId(strategyId);
+            setStrategyDraftId(strategyId);
+            setStrategyDraftCandidates(candidates.join('\n'));
+            showToast(t('common.saved'), 'success');
+        } catch (error) {
+            console.error('Failed to save strategy:', error);
+            showToast(`${t('common.error')}: ${error}`, 'error');
+        }
+    };
+
+    const handleEditStrategy = (strategyId: string) => {
+        if (!appConfig?.proxy.model_strategies) return;
+        const strategy = appConfig.proxy.model_strategies[strategyId];
+        if (!strategy) return;
+        setEditingStrategyId(strategyId);
+        setStrategyDraftId(strategyId);
+        setStrategyDraftCandidates(strategy.candidates.join('\n'));
+        setStrategyDraftPriority(strategy.policy?.model_priority || 'accuracy_first');
+        setStrategyDraftStickiness(strategy.policy?.stickiness || 'strong');
+        setStrategyDraftMaxHops(strategy.policy?.max_model_hops ? String(strategy.policy.max_model_hops) : '');
+    };
+
+    const handleDeleteStrategy = async (strategyId: string) => {
+        if (!appConfig?.proxy.model_strategies) return;
+        const newStrategies = { ...appConfig.proxy.model_strategies };
+        delete newStrategies[strategyId];
+        const newConfig = { ...appConfig.proxy, model_strategies: newStrategies };
+        try {
+            await invoke('update_model_mapping', { config: newConfig });
+            setAppConfig({ ...appConfig, proxy: newConfig });
+            if (editingStrategyId === strategyId) {
+                resetStrategyDraft();
+            }
+            showToast(t('common.success'), 'success');
+        } catch (error) {
+            console.error('Failed to delete strategy:', error);
+            showToast(`${t('common.error')}: ${error}`, 'error');
         }
     };
 
@@ -686,6 +832,15 @@ export default function ApiProxy() {
     const handleCancelEditApiKey = () => {
         setTempApiKey('');
         setIsEditingApiKey(false);
+    };
+
+    const withCurrentOption = (options: SelectOption[], value: string) => {
+        if (!value) return options;
+        if (options.some(option => option.value === value)) return options;
+        return [
+            { value, label: value, group: t('proxy.router.custom_target_group') },
+            ...options
+        ];
     };
 
 
@@ -1794,6 +1949,329 @@ print(response.text)`;
                             </div>
 
                             <div className="p-3 space-y-3">
+                                {/* 策略池 */}
+                                <div>
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <div className="w-6 h-6 rounded-md bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                                            <Sparkles size={14} />
+                                        </div>
+                                        <h3 className="text-sm font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wide">
+                                            {t('proxy.router.strategy_title')}
+                                        </h3>
+                                    </div>
+                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                        <div className="lg:col-span-1 bg-white dark:bg-base-100 border border-gray-100 dark:border-base-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                                    <Edit2 size={14} className="text-gray-400" />
+                                                    {t('proxy.router.strategy_editor')}
+                                                </span>
+                                                {editingStrategyId && (
+                                                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300 font-medium">
+                                                        {t('proxy.router.strategy_editing', { id: editingStrategyId })}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                                                        {t('proxy.router.strategy_id')}
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={strategyDraftId}
+                                                        onChange={(e) => setStrategyDraftId(e.target.value)}
+                                                        disabled={!!editingStrategyId}
+                                                        placeholder="claude-4.5-fallback"
+                                                        className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-base-200 rounded-lg bg-white dark:bg-base-200 text-xs text-gray-900 dark:text-base-content focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed font-mono shadow-sm transition-all"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                                                        {t('proxy.router.strategy_candidates')}
+                                                    </label>
+                                                    <textarea
+                                                        value={strategyDraftCandidates}
+                                                        onChange={(e) => setStrategyDraftCandidates(e.target.value)}
+                                                        placeholder={t('proxy.router.strategy_candidates_placeholder')}
+                                                        rows={5}
+                                                        className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-base-200 rounded-lg bg-white dark:bg-base-200 text-xs text-gray-900 dark:text-base-content focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all font-mono leading-relaxed"
+                                                    />
+                                                    <p className="mt-1.5 text-xs text-gray-400">
+                                                        {t('proxy.router.strategy_candidates_hint')}
+                                                    </p>
+                                                </div>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                                                            {t('proxy.router.strategy_priority')}
+                                                        </label>
+                                                        <select
+                                                            value={strategyDraftPriority}
+                                                            onChange={(e) => setStrategyDraftPriority(e.target.value as ModelPriority)}
+                                                            className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-base-200 rounded-lg bg-white dark:bg-base-200 text-xs text-gray-900 dark:text-base-content focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                        >
+                                                            <option value="accuracy_first">{t('proxy.router.strategy_priority_accuracy')}</option>
+                                                            <option value="capacity_first">{t('proxy.router.strategy_priority_capacity')}</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                                                            {t('proxy.router.strategy_stickiness')}
+                                                        </label>
+                                                        <select
+                                                            value={strategyDraftStickiness}
+                                                            onChange={(e) => setStrategyDraftStickiness(e.target.value as ModelStickiness)}
+                                                            className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-base-200 rounded-lg bg-white dark:bg-base-200 text-xs text-gray-900 dark:text-base-content focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                        >
+                                                            <option value="strong">{t('proxy.router.strategy_stickiness_strong')}</option>
+                                                            <option value="weak">{t('proxy.router.strategy_stickiness_weak')}</option>
+                                                        </select>
+                                                    </div>
+                                                    <div className="sm:col-span-2">
+                                                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                                                            {t('proxy.router.strategy_max_hops')}
+                                                        </label>
+                                                        <div className="relative">
+                                                            <input
+                                                                type="number"
+                                                                min={1}
+                                                                value={strategyDraftMaxHops}
+                                                                onChange={(e) => setStrategyDraftMaxHops(e.target.value)}
+                                                                placeholder={t('proxy.router.strategy_max_hops_placeholder')}
+                                                                className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-base-200 rounded-lg bg-white dark:bg-base-200 text-xs text-gray-900 dark:text-base-content focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-8 shadow-sm transition-all"
+                                                            />
+                                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400">
+                                                                <Activity size={12} />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3 pt-2">
+                                                    <button
+                                                        className="btn btn-sm flex-1 gap-2 bg-blue-600 hover:bg-blue-700 text-white border-none shadow-md hover:shadow-lg transition-all"
+                                                        onClick={handleSaveStrategy}
+                                                    >
+                                                        <CheckCircle size={14} />
+                                                        {t('common.save')}
+                                                    </button>
+                                                    <button
+                                                        className="btn btn-sm flex-1 gap-2 btn-ghost text-gray-500 hover:bg-gray-100 dark:hover:bg-base-200"
+                                                        onClick={resetStrategyDraft}
+                                                    >
+                                                        <X size={14} />
+                                                        {t('common.clear')}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="lg:col-span-2 bg-white dark:bg-base-100 border border-gray-100 dark:border-base-200 rounded-xl p-5 shadow-sm min-h-[400px] flex flex-col">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <span className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                                    <Layers size={14} className="text-gray-400" />
+                                                    {t('proxy.router.strategy_list')}
+                                                </span>
+                                                <div className="text-xs text-gray-400">
+                                                    {strategyEntries.length} {t('proxy.router.strategies_count') || 'strategies'}
+                                                </div>
+                                            </div>
+                                            <div className="flex-1 overflow-y-auto border border-gray-100 dark:border-base-200 rounded-lg">
+                                                <table className="table table-sm w-full bg-white dark:bg-base-100">
+                                                    <thead className="sticky top-0 bg-gray-50/95 dark:bg-base-200/95 backdrop-blur shadow-sm z-10 text-gray-500 dark:text-gray-400">
+                                                        <tr>
+                                                            <th className="text-xs py-3 font-medium pl-4">{t('proxy.router.strategy_id')}</th>
+                                                            <th className="text-xs py-3 font-medium">{t('proxy.router.strategy_candidates')}</th>
+                                                            <th className="text-xs py-3 font-medium">{t('proxy.router.strategy_policy')}</th>
+                                                            <th className="text-xs w-20 text-center py-3 font-medium pr-4">{t('common.action')}</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="font-mono text-xs">
+                                                        {strategyEntries.length > 0 ? (
+                                                            strategyEntries.map(([id, strategy]) => (
+                                                                <tr
+                                                                    key={id}
+                                                                    className={`hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors border-b border-gray-50 dark:border-base-200 last:border-none ${editingStrategyId === id ? 'bg-blue-50/80 dark:bg-blue-900/20' : ''}`}
+                                                                >
+                                                                    <td className="font-bold text-blue-600 dark:text-blue-400 pl-4 py-3">{id}</td>
+                                                                    <td className="max-w-[200px] truncate py-3" title={strategy.candidates.join(', ')}>
+                                                                        <div className="flex flex-wrap gap-1">
+                                                                            {strategy.candidates.slice(0, 2).map(c => (
+                                                                                <span key={c} className="px-1.5 py-0.5 rounded text-[10px] bg-gray-100 dark:bg-base-300 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+                                                                                    {c}
+                                                                                </span>
+                                                                            ))}
+                                                                            {strategy.candidates.length > 2 && (
+                                                                                <span className="px-1.5 py-0.5 rounded text-[10px] bg-gray-100 dark:bg-base-300 text-gray-500 border border-gray-200 dark:border-gray-700">
+                                                                                    +{strategy.candidates.length - 2}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="text-gray-500 dark:text-gray-400 py-3">
+                                                                        <div className="flex flex-col gap-1">
+                                                                            <span className="flex items-center gap-1.5">
+                                                                                <Target size={10} />
+                                                                                {t(`proxy.router.strategy_priority_${strategy.policy?.model_priority || 'accuracy_first'}`)}
+                                                                            </span>
+                                                                            <span className="flex items-center gap-1.5 opacity-75">
+                                                                                 <Wind size={10} />
+                                                                                {t(`proxy.router.strategy_stickiness_${strategy.policy?.stickiness || 'strong'}`)}
+                                                                            </span>
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="text-center pr-4 py-3">
+                                                                        <div className="flex items-center justify-center gap-1">
+                                                                            <button
+                                                                                className="btn btn-ghost btn-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                                                                onClick={() => handleEditStrategy(id)}
+                                                                                title={t('common.edit')}
+                                                                            >
+                                                                                <PencilLine size={14} />
+                                                                            </button>
+                                                                            <button
+                                                                                className="btn btn-ghost btn-xs text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                                                                onClick={() => handleDeleteStrategy(id)}
+                                                                                title={t('common.delete')}
+                                                                            >
+                                                                                <Trash2 size={14} />
+                                                                            </button>
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+                                                            ))
+                                                        ) : (
+                                                            <tr>
+                                                                <td colSpan={4} className="text-center py-8 text-gray-400 italic">
+                                                                    <div className="flex flex-col items-center gap-2 opacity-50">
+                                                                        <BrainCircuit size={24} />
+                                                                        <p>{t('proxy.router.strategy_empty')}</p>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* 分组映射区域 */}
+                                <div>
+                                    <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                                        <Layers size={14} /> {t('proxy.router.group_title')}
+                                    </h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+                                        {/* Claude 4.5 系列 */}
+                                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/10 dark:to-indigo-900/10 p-3 rounded-xl border border-blue-100 dark:border-blue-800/30 relative group hover:border-blue-400 transition-all duration-300">
+                                            <div className="flex items-center gap-3 mb-3">
+                                                <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
+                                                    <BrainCircuit size={16} />
+                                                </div>
+                                                <div>
+                                                    <div className="text-xs font-bold text-gray-900 dark:text-base-content">{t('proxy.router.groups.claude_45.name')}</div>
+                                                    <div className="text-[10px] text-gray-500 line-clamp-1">{t('proxy.router.groups.claude_45.desc')}</div>
+                                                </div>
+                                            </div>
+                                            <GroupedSelect
+                                                value={appConfig.proxy.anthropic_mapping?.["claude-4.5-series"] || "gemini-3-pro-high"}
+                                                onChange={(value) => handleMappingUpdate('anthropic', 'claude-4.5-series', value)}
+                                                options={withCurrentOption(
+                                                    modelSelectOptions,
+                                                    appConfig.proxy.anthropic_mapping?.["claude-4.5-series"] || "gemini-3-pro-high"
+                                                )}
+                                            />
+                                        </div>
+
+                                        {/* Claude 3.5 系列 */}
+                                        <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/10 dark:to-pink-900/10 p-3 rounded-xl border border-purple-100 dark:border-purple-800/30 relative group hover:border-purple-400 transition-all duration-300">
+                                            <div className="flex items-center gap-3 mb-3">
+                                                <div className="w-8 h-8 rounded-lg bg-purple-600 flex items-center justify-center text-white shadow-lg shadow-purple-500/30">
+                                                    <Puzzle size={16} />
+                                                </div>
+                                                <div>
+                                                    <div className="text-xs font-bold text-gray-900 dark:text-base-content">{t('proxy.router.groups.claude_35.name')}</div>
+                                                    <div className="text-[10px] text-gray-500 line-clamp-1">{t('proxy.router.groups.claude_35.desc')}</div>
+                                                </div>
+                                            </div>
+                                            <GroupedSelect
+                                                value={appConfig.proxy.anthropic_mapping?.["claude-3.5-series"] || "claude-sonnet-4-5-thinking"}
+                                                onChange={(value) => handleMappingUpdate('anthropic', 'claude-3.5-series', value)}
+                                                options={withCurrentOption(
+                                                    modelSelectOptions,
+                                                    appConfig.proxy.anthropic_mapping?.["claude-3.5-series"] || "claude-sonnet-4-5-thinking"
+                                                )}
+                                            />
+                                        </div>
+
+                                        {/* GPT-4 系列 */}
+                                        <div className="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/10 dark:to-blue-900/10 p-3 rounded-xl border border-indigo-100 dark:border-indigo-800/30 relative group hover:border-indigo-400 transition-all duration-300">
+                                            <div className="flex items-center gap-3 mb-3">
+                                                <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30">
+                                                    <Zap size={16} />
+                                                </div>
+                                                <div>
+                                                    <div className="text-xs font-bold text-gray-900 dark:text-base-content">{t('proxy.router.groups.gpt_4.name')}</div>
+                                                    <div className="text-[10px] text-gray-500 line-clamp-1">{t('proxy.router.groups.gpt_4.desc')}</div>
+                                                </div>
+                                            </div>
+                                            <GroupedSelect
+                                                value={appConfig.proxy.openai_mapping?.["gpt-4-series"] || "gemini-3-pro-high"}
+                                                onChange={(value) => handleMappingUpdate('openai', 'gpt-4-series', value)}
+                                                options={withCurrentOption(
+                                                    modelSelectOptions,
+                                                    appConfig.proxy.openai_mapping?.["gpt-4-series"] || "gemini-3-pro-high"
+                                                )}
+                                            />
+                                            <p className="mt-1 text-[9px] text-indigo-500">{t('proxy.router.gemini3_only_warning')}</p>
+                                        </div>
+
+                                        {/* GPT-4o / 3.5 系列 */}
+                                        <div className="bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-900/10 dark:to-green-900/10 p-3 rounded-xl border border-emerald-100 dark:border-emerald-800/30 relative group hover:border-emerald-400 transition-all duration-300">
+                                            <div className="flex items-center gap-3 mb-3">
+                                                <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white shadow-lg shadow-emerald-500/30">
+                                                    <Wind size={16} />
+                                                </div>
+                                                <div>
+                                                    <div className="text-xs font-bold text-gray-900 dark:text-base-content">{t('proxy.router.groups.gpt_4o.name')}</div>
+                                                    <div className="text-[10px] text-gray-500 line-clamp-1">{t('proxy.router.groups.gpt_4o.desc')}</div>
+                                                </div>
+                                            </div>
+                                            <GroupedSelect
+                                                value={appConfig.proxy.openai_mapping?.["gpt-4o-series"] || "gemini-3-flash"}
+                                                onChange={(value) => handleMappingUpdate('openai', 'gpt-4o-series', value)}
+                                                options={withCurrentOption(
+                                                    modelSelectOptions,
+                                                    appConfig.proxy.openai_mapping?.["gpt-4o-series"] || "gemini-3-flash"
+                                                )}
+                                            />
+                                            <p className="mt-1 text-[9px] text-emerald-600">{t('proxy.router.gemini3_only_warning')}</p>
+                                        </div>
+
+                                        {/* GPT-5 系列 */}
+                                        <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/10 dark:to-orange-900/10 p-3 rounded-xl border border-amber-100 dark:border-amber-800/30 relative group hover:border-amber-400 transition-all duration-300">
+                                            <div className="flex items-center gap-3 mb-3">
+                                                <div className="w-8 h-8 rounded-lg bg-amber-600 flex items-center justify-center text-white shadow-lg shadow-amber-500/30">
+                                                    <Zap size={16} />
+                                                </div>
+                                                <div>
+                                                    <div className="text-xs font-bold text-gray-900 dark:text-base-content">{t('proxy.router.groups.gpt_5.name')}</div>
+                                                    <div className="text-[10px] text-gray-500 line-clamp-1">{t('proxy.router.groups.gpt_5.desc')}</div>
+                                                </div>
+                                            </div>
+                                            <GroupedSelect
+                                                value={appConfig.proxy.openai_mapping?.["gpt-5-series"] || "gemini-3-flash"}
+                                                onChange={(value) => handleMappingUpdate('openai', 'gpt-5-series', value)}
+                                                options={withCurrentOption(
+                                                    modelSelectOptions,
+                                                    appConfig.proxy.openai_mapping?.["gpt-5-series"] || "gemini-3-flash"
+                                                )}
+                                            />
+                                            <p className="mt-1 text-[9px] text-amber-600">{t('proxy.router.gemini3_only_warning')}</p>
+                                        </div>
+                                    </div>
+                                </div>
                                 {/* 精确映射管理 */}
                                 <div>
                                     {/* 后台任务模型配置 (Compact Mode) */}

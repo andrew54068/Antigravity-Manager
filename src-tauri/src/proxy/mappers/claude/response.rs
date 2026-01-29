@@ -258,6 +258,13 @@ impl NonStreamingProcessor {
                     s_id
                 );
             }
+            // Log diagnostic info
+            tracing::debug!(
+                "[Claude-Response] thought_signature received (len={}) has_function_call={} is_thought={}",
+                sig.len(),
+                part.function_call.is_some(),
+                part.thought.unwrap_or(false)
+            );
         }
 
         // 1. FunctionCall 处理

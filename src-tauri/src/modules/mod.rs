@@ -5,13 +5,16 @@ pub mod logger;
 pub mod db;
 pub mod process;
 pub mod oauth;
+#[cfg(feature = "ui")]
 pub mod oauth_server;
 pub mod migration;
+#[cfg(feature = "ui")]
 pub mod tray;
 pub mod i18n;
 pub mod proxy_db;
 pub mod device;
 pub mod update_checker;
+#[cfg(feature = "ui")]
 pub mod scheduler;
 pub mod http_api;
 pub mod token_stats;
