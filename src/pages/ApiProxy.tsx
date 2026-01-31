@@ -35,7 +35,8 @@ import { CliSyncCard } from '../components/proxy/CliSyncCard';
 import DebouncedSlider from '../components/common/DebouncedSlider';
 import { listAccounts } from '../services/accountService';
 import CircuitBreaker from '../components/settings/CircuitBreaker';
-import { CircuitBreakerConfig } from '../types/config';
+import { CircuitBreakerConfig, ModelStrategy } from '../types/config';
+import ModelStrategyConfig from '../components/proxy/ModelStrategyConfig';
 
 interface ProxyStatus {
     running: boolean;
@@ -543,6 +544,18 @@ export default function ApiProxy() {
         const newConfig = {
             ...appConfig,
             circuit_breaker: newBreakerConfig
+        };
+        saveConfig(newConfig);
+    };
+
+    const updateModelStrategies = (newStrategies: Record<string, ModelStrategy>) => {
+        if (!appConfig) return;
+        const newConfig = {
+            ...appConfig,
+            proxy: {
+                ...appConfig.proxy,
+                model_strategies: newStrategies
+            }
         };
         saveConfig(newConfig);
     };
@@ -1500,6 +1513,18 @@ print(response.text)`;
                                         </div>
                                     )}
                                 </div>
+                            </CollapsibleCard>
+
+                            {/* Model Strategies */}
+                            <CollapsibleCard
+                                title={t('proxy.strategies.title', { defaultValue: 'Model Strategies' })}
+                                icon={<Layers size={18} className="text-blue-500" />}
+                                defaultExpanded={true}
+                            >
+                                <ModelStrategyConfig
+                                    strategies={appConfig.proxy.model_strategies || {}}
+                                    onUpdate={updateModelStrategies}
+                                />
                             </CollapsibleCard>
 
                             {/* Account Scheduling & Rotation */}

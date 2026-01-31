@@ -12,6 +12,9 @@ export interface ProxyConfig {
     admin_password?: string;
     auto_start: boolean;
     custom_mapping?: Record<string, string>;
+    anthropic_mapping?: Record<string, string>;
+    openai_mapping?: Record<string, string>;
+    model_strategies?: Record<string, ModelStrategy>;
     request_timeout: number;
     enable_logging: boolean;
     debug_logging?: DebugLoggingConfig;
@@ -104,6 +107,27 @@ export interface AppConfig {
     pinned_quota_models: PinnedQuotaModelsConfig; // [NEW] 配额关注列表
     circuit_breaker: CircuitBreakerConfig; // [NEW] 熔断器配置
     proxy: ProxyConfig;
+}
+
+export enum ModelPriority {
+    AccuracyFirst = 'accuracy_first',
+    CapacityFirst = 'capacity_first',
+}
+
+export enum ModelStickiness {
+    Strong = 'strong',
+    Weak = 'weak',
+}
+
+export interface ModelFallbackPolicy {
+    model_priority: ModelPriority;
+    stickiness: ModelStickiness;
+    max_model_hops?: number;
+}
+
+export interface ModelStrategy {
+    candidates: string[];
+    policy: ModelFallbackPolicy;
 }
 
 // ============================================================================

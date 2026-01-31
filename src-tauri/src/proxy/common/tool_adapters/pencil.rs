@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use serde_json::Value;
 use super::super::tool_adapter::{ToolAdapter, append_hint_to_schema};
 
