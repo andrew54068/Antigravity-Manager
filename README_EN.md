@@ -247,6 +247,9 @@ print(response.choices[0].message.content)
 ## 📝 Developer & Community
 
 *   **Changelog**:
+    *   **v4.1.0 (2026-01-31)**:
+        -   **[Core Feature] Model Strategy Support**: Introduced model strategy functionality, enabling more flexible model routing and configuration.
+        -   **[CI/Docs] Documentation & Build Fixes**: Corrected version tags in Homebrew Cask and Docker documentation, and fixed CI build errors.
     *   **v4.0.8 (2026-01-30)**:
         -   **[Core Feature] Window State Persistence (PR #1322)**: Automatically restores the window size and position from the previous session.
         -   **[Core Fix] Graceful Shutdown for Admin Server (PR #1323)**: Fixed the port 8045 binding failure issue on Windows when restarting the app after exit.
